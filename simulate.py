@@ -155,7 +155,9 @@ def simulate(config_file, scenarios, nsim, jobs, interactive, write_csv, write_p
                             geodata_file=spatial_base_path / spatial_config["geodata"].get(),
                             mobility_file=spatial_base_path / spatial_config["mobility"].get(),
                             popnodes_key=spatial_config["popnodes"].get(),
-                            nodenames_key=spatial_config["nodenames"].get()
+                            nodenames_key=spatial_config["nodenames"].get(),
+                            ti=config["start_date"].as_date(),
+                            tf=config["end_date"].as_date()
                         ),
                         nsim=nsim,
                         npi_scenario=scenario,
