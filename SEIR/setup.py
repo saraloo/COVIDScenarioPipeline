@@ -44,10 +44,10 @@ class SpatialSetup:
 
         elif ('.csv' in str(mobility_file)):
             print('Mobility files as matrices are not recommended. Please switch soon to long form csv files.')
-            mobility_data = pd.read_csv(mobility_file, converters={'ori': lambda x: str(x), 'dest': lambda x: str(x)})
+            mobility_data = pd.read_csv(mobility_file, converters={'ori': lambda x: str(x), 'dest': lambda x: str(x)}, parse_dates=['date'])
             self.mobility =  np.zeros(((tf - ti).days, self.nnodes, self.nnodes))
             for index, row in mobility_data.iterrows():
-                self.mobility[self.nodenames.index(row['ori']),self.nodenames.index(row['dest'])] = row['amount']
+                self.mobility[(row['date'].date()-ti).days, self.nodenames.index(row['ori']),self.nodenames.index(row['dest'])] = row['amount']
                 if (self.nodenames.index(row['ori']) == self.nodenames.index(row['dest'])):
                     raise ValueError(f"Mobility fluxes with same origin and destination: '{row['ori']}' to {row['dest']} in long form matrix. This is not supported")
         else:
