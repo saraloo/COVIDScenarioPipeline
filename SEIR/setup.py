@@ -57,14 +57,15 @@ class SpatialSetup:
         #     raise ValueError(f"mobility data is not symmetric.")
 
         # Make sure mobility values <= the population of src node
-        tmp = (self.mobility.T - self.popnodes).T
-        tmp[tmp < 0] = 0
-        if tmp.any():
-            rows, cols, values = scipy.sparse.find(tmp)
-            errmsg = ""
-            for r,c,v in zip(rows, cols, values):
-                errmsg += f"\n({r}, {c}) = {self.mobility[r,c]} > population of '{self.nodenames[r]}' = {self.popnodes[r]}"
-            raise ValueError(f"The following entries in the mobility data exceed the source node populations in geodata:{errmsg}")
+        for t in range((tf - ti).days):
+            tmp = (self.mobility[t].T - self.popnodes).T
+            tmp[tmp < 0] = 0
+            if tmp.any():
+                rows, cols, values = scipy.sparse.find(tmp)
+                errmsg = ""
+                for r,c,v in zip(rows, cols, values):
+                    errmsg += f"\n({r}, {c}) = {self.mobility[t,r,c]} > population of '{self.nodenames[r]}' = {self.popnodes[r]} at time {ti + datetime.timedelta(t)}"
+                raise ValueError(f"The following entries in the mobility data exceed the source node populations in geodata:{errmsg}")
 
 
 class Setup():
