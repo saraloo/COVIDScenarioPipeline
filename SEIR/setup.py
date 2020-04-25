@@ -34,7 +34,6 @@ class SpatialSetup:
         if len(self.nodenames) != len(set(self.nodenames)):
             raise ValueError(f"There are duplicate nodenames in geodata.")
 
-
         if ('.txt' in str(mobility_file)):
             print('Mobility files as matrices are not recommended. Please switch soon to long form csv files.')
             self.mobility = scipy.sparse.csr_matrix(np.loadtxt(mobility_file)) # K x K matrix of people moving
@@ -43,7 +42,7 @@ class SpatialSetup:
                 raise ValueError(f"mobility data must have dimensions of length of geodata ({self.nnodes}, {self.nnodes}). Actual: {self.mobility.shape}")
 
         elif ('.csv' in str(mobility_file)):
-            print('Mobility files as matrices are not recommended. Please switch soon to long form csv files.')
+            print('Loading CSV mobility file...')
             mobility_data = pd.read_csv(mobility_file, converters={'ori': lambda x: str(x), 'dest': lambda x: str(x)}, parse_dates=['date'])
             self.mobility =  np.zeros(((tf - ti).days + 1, self.nnodes, self.nnodes))
             for index, row in mobility_data.iterrows():
@@ -52,6 +51,12 @@ class SpatialSetup:
                     raise ValueError(f"Mobility fluxes with same origin and destination: '{row['ori']}' to {row['dest']} in long form matrix. This is not supported")
         else:
             raise ValueError(f"Mobility data must either be a .csv file in longform (recommended) or a .txt matrix file. Got {mobility_file}")
+
+        for t in range((tf - ti).days+1):
+            print((self.mobility[t].sum() > self.popnodes).shape)
+            if (self.mobility[t].sum() > self.popnodes).any(): 
+                print(f'Correcting matrix at time {t}...')
+                self.mobility[t][self.mobility[t].sum() > self.popnodes, :] = self.mobility[t][self.mobility[t].sum() > self.popnodes, :] *  self.popnodes/self.mobility[t].sum() 
 
         # if (self.mobility - self.mobility.T).nnz != 0:
         #     raise ValueError(f"mobility data is not symmetric.")
