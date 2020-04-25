@@ -53,10 +53,9 @@ class SpatialSetup:
             raise ValueError(f"Mobility data must either be a .csv file in longform (recommended) or a .txt matrix file. Got {mobility_file}")
 
         for t in range((tf - ti).days+1):
-            print((self.mobility[t].sum() > self.popnodes).shape)
-            if (self.mobility[t].sum() > self.popnodes).any(): 
+            if (self.mobility[t].sum(axis=0) > self.popnodes).any(): 
                 print(f'Correcting matrix at time {t}...')
-                self.mobility[t][self.mobility[t].sum() > self.popnodes, :] = self.mobility[t][self.mobility[t].sum() > self.popnodes, :] *  self.popnodes/self.mobility[t].sum() 
+                self.mobility[t][self.mobility[t].sum(axis=0) > self.popnodes, :] = 0.1 * self.mobility[t][self.mobility[t].sum(axis=0) > self.popnodes, :] *  self.popnodes/self.mobility[t].sum(axis=0)
 
         # if (self.mobility - self.mobility.T).nnz != 0:
         #     raise ValueError(f"mobility data is not symmetric.")
@@ -154,6 +153,8 @@ def seeding_draw(s, sim_id):
 
             importation[(row['date'].date()-s.ti).days][s.spatset.nodenames.index(row['place'])] = \
                 np.random.poisson(row['amount'])
+
+        print(max(importation))
 
     elif (method == 'FolderDraw'):
         folder_path = s.seeding_config["folder_path"].as_str()
