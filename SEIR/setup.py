@@ -154,7 +154,6 @@ def seeding_draw(s, sim_id):
             importation[(row['date'].date()-s.ti).days][s.spatset.nodenames.index(row['place'])] = \
                 np.random.poisson(row['amount'])
 
-        print(max(importation))
 
     elif (method == 'FolderDraw'):
         folder_path = s.seeding_config["folder_path"].as_str()

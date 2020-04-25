@@ -137,7 +137,7 @@ def steps_SEIR_nb(p_vec, seeding, dt, t_inter, nnodes, popnodes, mobility, dynfi
             if (mobility[int(it%(1/dt))][i,:].sum() > popnodes[i] ): print("something bad")
             p_expose = 1.0 - np.exp(-dt * (
               ((1 - percent_day_away * mobility[int(it%(1/dt))][i,:].sum()/ popnodes[i] ) * beta[it][i] * (y[I1][i] + y[I2][i] + y[I3][i])**alpha / popnodes[i] ) +  # Staying at home FoI
-              (     percent_day_away * mobility[int(it%(1/dt))][i,:]/popnodes             * beta[it] * (y[I1] + y[I2] + y[I3])).sum()
+              (     percent_day_away * mobility[int(it%(1/dt))][i,:]/popnodes             * beta[it] * (y[I1] + y[I2] + y[I3])**alpha / popnodes).sum()
               )
             )
             #if p_expose < 0:
