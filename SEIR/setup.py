@@ -54,7 +54,7 @@ class SpatialSetup:
             mobility_data = pa.parquet.read_table(mobility_file).to_pandas()
             self.mobility =  np.zeros(((tf - ti).days + 1, self.nnodes, self.nnodes))
             for index, row in mobility_data.iterrows():
-                self.mobility[(row['date'].date()-ti).days, self.nodenames.index(row['ori']), self.nodenames.index(row['dest'])] = row['amount']
+                self.mobility[(row['date']-ti).days, self.nodenames.index(row['ori']), self.nodenames.index(row['dest'])] = row['amount']
                 if (self.nodenames.index(row['ori']) == self.nodenames.index(row['dest'])):
                     raise ValueError(f"Mobility fluxes with same origin and destination: '{row['ori']}' to {row['dest']} in long form matrix. This is not supported")
         else:
