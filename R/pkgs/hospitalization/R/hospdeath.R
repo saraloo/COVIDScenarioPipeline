@@ -201,6 +201,9 @@ write_hosp_output <- function(root_out_dir, data_dir, dscenario_name, sim_id, re
 }
 
 
+
+
+
 ##'
 ##' Build a set of sampled hospitalizations, deaths, and recoveries
 ##' from the incident infection data from the simulation model.
@@ -444,6 +447,165 @@ build_hospdeath_geoid_fixedIFR_par <- function(
       arrange(date_inds, geo_ind)
 
     write_hosp_output(root_out_dir, data_dir, dscenario_name, sim_id, res, use_parquet)
+    NULL
+  }
+  doParallel::stopImplicitCluster()
+}
+
+
+##'
+##' Build a set of sampled hospitalizations, deaths, and recoveries, stratified by age
+##' from the incident infection data from the simulation model.
+##'
+##' @param prob_dat_age df of p_hosp, p_death, p_ICU, p_vent, GEOID, age-stratified
+##' @param p_death probability of death, among infections (user-defined)
+##' @param p_hosp_inf probability of hospitalization among infections (user-defined)
+##' @param data_dir Path to the directory that contains the CSV output of the simulation model
+##' @param dscenario_name The name of the scenario we are analyzing here (e.g., "highdeath", "meddeath", etc.)
+##' @param time_hosp_pars parameters for time from onset to hospitalization distribution
+##' @param time_ICU_pars parameters for time from hospitalization to ICU
+##' @param time_vent_pars parameters for time from ICU to time on ventilator
+##' @param time_onset_death_pars parameters for time from onset to death distribution
+##' @param time_disch_pars parameters for time from hospitalization to discharge parameters
+##' @param time_ICUdur_pars parameetrs for time of ICU duration
+##' @param cores The number of CPU cores to run this model on in parallel
+##' @param root_out_dir Path to the directory to write the outputs of this analysis
+##'
+##' @export
+build_hospdeath_agestrat_geoid_fixedIFR_par <- function(
+  prob_dat_age,
+  p_age_given_inf,
+  p_death,
+  p_hosp_inf,
+  data_dir,
+  dscenario_name,
+  time_hosp_pars = c(1.23, 0.79),
+  time_ICU_pars = c(log(10.5), log((10.5-7)/1.35)),
+  time_vent_pars = c(log(10.5), log((10.5-8)/1.35)),
+  time_onset_death_pars = c(log(11.25), log(1.15)),
+  time_disch_pars = c(log(11.5), log(1.22)),
+  time_ICUdur_pars = c(log(17.46), log(4.044)),
+  time_ventdur_pars = log(17),
+  cores=8,
+  root_out_dir='hospitalization',
+  use_parquet = FALSE,
+  start_sim = 1,
+  num_sims = -1
+) {
+  n_sim <- ifelse(num_sims < 0, length(list.files(data_dir)), num_sims)
+  print(paste("Creating cluster with",cores,"cores"))
+  doParallel::registerDoParallel(cores)
+  
+  if(n_sim == 0){
+    stop("No simulations selected to run")
+  }
+  
+  ## scale prob_dat to match defined IFR, p_hosp_inf
+  prob_dat$p_death_inf_scaled <- prob_dat$rr_death_inf * p_death
+  prob_dat$p_hosp_inf_scaled <- prob_dat$rr_hosp_inf * p_hosp_inf
+  
+  
+  print(paste("Running over",n_sim,"simulations"))
+  
+  pkgs <- c("dplyr", "readr", "data.table", "tidyr", "hospitalization")
+  foreach::foreach(s=seq_len(n_sim), .packages=pkgs) %dopar% {
+    sim_id <- start_sim + s - 1
+    dat_I <- hosp_load_scenario_sim(data_dir, sim_id,
+                                    keep_compartments = "diffI",
+                                    geoid_len=5,
+                                    use_parquet = use_parquet) %>%
+      mutate(hosp_curr = 0,
+             icu_curr = 0,
+             vent_curr = 0,
+             uid = paste0(geoid, "-",sim_num)) %>%
+      rename(incidI = N) %>%
+      data.table::as.data.table()
+
+    
+    
+    # first do a multinomial to distribute infections
+    age_grps <- unique(prob_dat_age$age)
+    prob_data_list <- p_age_given_inf %>% split(.$geoid)
+    dat_I_agestrat <- covidSeverity::age_strat_outcome(outcome_var="incidI", outcome_data=dat_I, prob_data_list=prob_data_list, add=TRUE)
+    
+    res_all <- dat_I_agestrat %>% dplyr::select(time, geoid, sim_num) 
+    
+    # run outcome generation for each age group
+    for (a in seq_along(age_grps)){
+      
+      # Get age-specific infections to start
+      dat_I <- dat_I_agestrat %>% dplyr::select(time, geoid, uid, sim_num, hosp_curr, icu_curr, vent_curr, incidI=paste0("incidI_",age_grps[a]))
+      dat_ <- dat_I %>%
+        dplyr::left_join(prob_dat, by="geoid")
+      #dplyr::left_join(prob_dat %>% dplyr::filter(age==age_grps[a]), by="geoid")
+      
+        
+      # Add time things
+      dat_H <- hosp_create_delay_frame('incidI',
+                                       dat_$p_hosp_inf_scaled,
+                                       dat_,
+                                       time_hosp_pars,"H")
+      data_ICU <- hosp_create_delay_frame('incidH',
+                                          dat_$p_icu_hosp,
+                                          dat_H,
+                                          time_ICU_pars,"ICU")
+      data_Vent <- hosp_create_delay_frame('incidICU',
+                                           dat_$p_vent_icu,
+                                           data_ICU,
+                                           time_vent_pars,"Vent")
+      data_D <- hosp_create_delay_frame('incidI',
+                                        dat_$p_death_inf_scaled,
+                                        dat_,
+                                        time_onset_death_pars,"D")
+      R_delay_ <- round(exp(time_disch_pars[1]))
+      ICU_dur_ <- round(exp(time_ICUdur_pars[1]))
+      Vent_dur_ <- round(exp(time_ventdur_pars[1]))
+      
+      stopifnot(is.data.table(dat_I) && is.data.table(dat_H) && is.data.table(data_ICU) && is.data.table(data_Vent) && is.data.table(data_D))
+      
+      # Using `merge` instead of full_join for performance reasons
+      res <- Reduce(function(x, y, ...) merge(x, y, all = TRUE, ...),
+                    list(dat_I, dat_H, data_ICU, data_Vent, data_D)) %>%
+        replace_na(
+          list(incidI = 0,
+               incidH = 0,
+               incidICU = 0,
+               incidVent = 0,
+               incidD = 0,
+               vent_curr = 0,
+               hosp_curr = 0)) %>%
+        # get sim nums
+        select(-geoid, -sim_num) %>%
+        separate(uid, c("geoid", "sim_num"), sep="-", remove=FALSE) %>%
+        mutate(date_inds = as.integer(time - min(time) + 1),
+               geo_ind = as.numeric(as.factor(geoid))) %>%
+        arrange(geo_ind, date_inds) %>%
+        split(.$geo_ind) %>%
+        purrr::map_dfr(function(.x){
+          .x$hosp_curr <- cumsum(.x$incidH) - lag(cumsum(.x$incidH),
+                                                  n=R_delay_,default=0)
+          .x$icu_curr <- cumsum(.x$incidICU) - lag(cumsum(.x$incidICU),
+                                                   n=ICU_dur_,default=0)
+          .x$vent_curr <- cumsum(.x$incidVent) - lag(cumsum(.x$incidVent),
+                                                     n=Vent_dur_)
+          return(.x)
+        }) %>%
+        replace_na(
+          list(vent_curr = 0,
+               icu_curr = 0,
+               hosp_curr = 0)) %>%
+        arrange(date_inds, geo_ind)
+      
+      # Make variable names age-specific
+      res %>% 
+        dplyr::rename_at(dplyr::vars(tidyselect::contains("incid")), list(~paste0(., "_",age_grps[a]))) %>% 
+        dplyr::rename_at(dplyr::vars(tidyselect::contains("_curr")), list(~paste0(., "_",age_grps[a]))) %>%
+        dplyr::select(-date_inds, -geo_ind, -uid) %>% mutate(sim_num = as.integer(sim_num)) %>%
+        dplyr::full_join(x=res_all, y=., by=c("time","geoid","sim_num")) -> res_all
+      
+    }
+      
+    write_hosp_output(root_out_dir, data_dir, paste0(dscenario_name,"_AgeStrat"), sim_id, res, use_parquet)
     NULL
   }
   doParallel::stopImplicitCluster()
