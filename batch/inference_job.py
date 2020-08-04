@@ -37,11 +37,13 @@ from SEIR import file_paths
               help="The number of CPUs to request for running jobs")
 @click.option("-m", "--memory", "memory", type=click.IntRange(min=1000, max=6000), default=4000, show_default=True,
               help="The amount of RAM in megabytes needed per CPU running simulations")
-@click.option("-r", "--restart-from", "restart_from", type=str, default=None,
-              help="The location of an S3 run to use as the initial to the first block of the current run")
-@click.option("-B", "--restart-from-block", "restart_from_block", type=str, default=None,
-              help="The location of an S3 run to use as the initial to the first block of the current run")
-def launch_batch(config_file, run_id, num_jobs, sims_per_job, num_blocks, outputs, s3_bucket, batch_job_definition, job_queue_prefix, vcpus, memory, restart_from, restart_from_block):
+@click.option("--resume-from-run-id" "--resume-from-run-id", "last_run_id", type=str, default=None,
+              help="The run id of an S3 run to use as the initial to the first block of the current run")
+@click.option("--resume-from-prefix" "--resume-from-prefix", "last_prefix", type=str, default=None,
+              help="The prefix of an S3 run to use as the initial to the first block of the current run")
+@click.option("--resume-from-block" "--resume-from-block", "last_block", type=str, default=None,
+              help="The block of an S3 run to use as the initial to the first block of the current run")
+def launch_batch(config_file, run_id, num_jobs, sims_per_job, num_blocks, outputs, s3_bucket, batch_job_definition, job_queue_prefix, vcpus, memory, last_run_id, last_prefix, last_block):
 
     config = None
     with open(config_file) as f:
@@ -63,7 +65,7 @@ def launch_batch(config_file, run_id, num_jobs, sims_per_job, num_blocks, output
     else:
         print(f"WARNING: no filtering section found in {config_file}!")
 
-    handler = BatchJobHandler(run_id, num_jobs, sims_per_job, num_blocks, outputs, s3_bucket, batch_job_definition, vcpus, memory, restart_from, restart_from_block)
+    handler = BatchJobHandler(run_id, num_jobs, sims_per_job, num_blocks, outputs, s3_bucket, batch_job_definition, vcpus, memory, last_run_id, last_prefix, last_block)
 
     job_queues = get_job_queues(job_queue_prefix)
     scenarios = config['interventions']['scenarios']
@@ -129,7 +131,7 @@ def get_job_queues(job_queue_prefix):
 
 
 class BatchJobHandler(object):
-    def __init__(self, run_id, num_jobs, sims_per_job, num_blocks, outputs, s3_bucket, batch_job_definition, vcpus, memory, restart_from, restart_from_block):
+    def __init__(self, run_id, num_jobs, sims_per_job, num_blocks, outputs, s3_bucket, batch_job_definition, vcpus, memory, last_run_id, last_prefix, last_block):
         self.run_id = run_id
         self.num_jobs = num_jobs
         self.sims_per_job = sims_per_job
@@ -139,8 +141,9 @@ class BatchJobHandler(object):
         self.batch_job_definition = batch_job_definition
         self.vcpus = vcpus
         self.memory = memory
-        self.restart_from = restart_from
-        self.restart_from_block = restart_from_block
+        self.last_run_id = last_run_id
+        self.last_prefix = last_prefix
+        self.last_block = last_block
 
     def launch(self, job_name, config_file, scenarios, p_death_names, job_queues):
 
@@ -215,9 +218,13 @@ class BatchJobHandler(object):
             cur_env_vars.append({"name": "COVID_PREFIX", "value": f"{config['name']}/{s}/{d}"})
             cur_env_vars.append({"name": "COVID_BLOCK_INDEX", "value": "1"})
             cur_env_vars.append({"name": "COVID_RUN_INDEX", "value": f"{self.run_id}"})
-            if self.restart_from:
-                cur_env_vars.append({"name": "S3_LAST_JOB_OUTPUT", "value": self.restart_from})
-                cur_env_vars.append({"name": "LAST_JOB_BLOCK", "value": self.last_job_block})
+            if (self.last_run_id) or (self.last_prefix) or (self.last_block):
+                if not (self.last_run_id and self.last_prefix and self.last_block):
+                    raise ValueError(f"We do not support resuming unless run_id, prefix and block are all provided")
+                cur_env_vars.append({"name": "S3_LAST_JOB_OUTPUT", "value": self.last_run_id})
+                cur_env_vars.append({"name": "LAST_RUN_INDEX", "value": self.last_run_id})
+                cur_env_vars.append({"name": "LAST_PREFIX", "value": self.last_prefix})
+                cur_env_vars.append({"name": "LAST_BLOCK", "value": self.last_block})
             cur_env_vars.append({"name": "JOB_NAME", "value": f"{cur_job_name}_block0"})
 
             cur_job_queue = job_queues[ctr % len(job_queues)]
