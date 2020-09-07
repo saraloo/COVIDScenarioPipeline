@@ -1,5 +1,7 @@
 # Setup to test inference on synthetic data
 # Preamble ---------------------------------------------------------------------
+options(warn=1)
+options(error=quit,status=2)
 
 library(tidyverse)
 library(xts)
@@ -12,7 +14,7 @@ library(inference)
 library(reticulate)
 
 option_list = list(
-  optparse::make_option(c("-t", "--test"), action="store", default=2, type='integer', help="Test id to compile"),
+  optparse::make_option(c("-t", "--test"), action="store", default=1, type='integer', help="Test id to compile"),
   optparse::make_option(c("-p", "--pipepath"), action="store", type='character', help="path to the COVIDScenarioPipeline directory", default = Sys.getenv("COVID_PATH", "COVIDScenarioPipeline/")),
   optparse::make_option(c("-y", "--python"), action="store", default=Sys.getenv("COVID_PYTHON_PATH","python3"), type='character', help="path to python executable"),
   optparse::make_option(c("-r", "--rpath"), action="store", default=Sys.getenv("COVID_RSCRIPT_PATH","Rscript"), type = 'character', help = "path to R executable"),
@@ -38,7 +40,7 @@ config <- covidcommon::load_config(config_file)
 start_date <- "2020-01-01"
 end_date <- "2020-10-01"
 
-set.seed(123)
+# set.seed(123)
 
 # Functions --------------------------------------------------------------------
 ##'
@@ -518,7 +520,7 @@ for (i in 1:length(tests)) {
 
 for (i in 1:length(tests)) {
   write(
-    glue::glue("Rscript COVIDScenarioPipeline/R/scripts/postprocess_inference.R -t {i} -i TRUE -r FALSE -j {opt$n_cores}"), 
+    glue::glue("Rscript COVIDScenarioPipeline/R/scripts/postprocess_inference.R -t {i} -i TRUE -r TRUE -j {opt$n_cores}"), 
     run_file,
     append = T
   )

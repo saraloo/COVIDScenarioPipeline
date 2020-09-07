@@ -1,4 +1,6 @@
 # Preamble ---------------------------------------------------------------------
+options(warn=1)
+options(error=quit,status=2)
 
 library(tidyverse)
 library(magrittr)
