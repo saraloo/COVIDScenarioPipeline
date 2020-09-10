@@ -18,8 +18,8 @@ option_list = list(
   optparse::make_option(c("-p", "--pipepath"), action="store", type='character', help="path to the COVIDScenarioPipeline directory", default = Sys.getenv("COVID_PATH", "COVIDScenarioPipeline/")),
   optparse::make_option(c("-y", "--python"), action="store", default=Sys.getenv("COVID_PYTHON_PATH","python3"), type='character', help="path to python executable"),
   optparse::make_option(c("-r", "--rpath"), action="store", default=Sys.getenv("COVID_RSCRIPT_PATH","Rscript"), type = 'character', help = "path to R executable"),
-  optparse::make_option(c("-n", "--n_slots"), action="store", default=10, type = 'integer', help = "Number of slots to run"),
-  optparse::make_option(c("-k", "--n_iter"), action="store", default=50, type = 'integer', help = "Number of iterations per slot"),
+  optparse::make_option(c("-n", "--n_slots"), action="store", default=100, type = 'integer', help = "Number of slots to run"),
+  optparse::make_option(c("-k", "--n_iter"), action="store", default=40, type = 'integer', help = "Number of iterations per slot"),
   optparse::make_option(c("-j", "--n_cores"), action="store", default=parallel::detectCores() - 2, type = 'integer', help = "Number of cores to use")
 )
 
@@ -425,7 +425,7 @@ for (test in tests) {
   # Write seeding lambda file for all slots to avoid calling create_seeding.R
   
   # file.remove(first_hpar_file)
-  file.copy(config$outcomes$param_place_file, first_hpar_file)
+  file.copy(hpar_generation_file, first_hpar_file)
   
   reticulate::use_python(Sys.which(opt$python),require=TRUE)
   ## python configuration for minimal_interface.py
@@ -442,7 +442,7 @@ for (test in tests) {
   reticulate::py_run_file(paste(opt$pipepath,"minimal_interface.py",sep='/'))
   
   py$onerun_SEIR(0, py$s)
-  py$onerun_SEIR_loadID(0, py$s, 0)
+  # py$onerun_SEIR_loadID(0, py$s, 0)
   py$onerun_HOSP(0)
   
   for (i in 1:opt$n_slots) {
