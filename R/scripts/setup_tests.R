@@ -19,7 +19,7 @@ option_list = list(
   optparse::make_option(c("-y", "--python"), action="store", default=Sys.getenv("COVID_PYTHON_PATH","python3"), type='character', help="path to python executable"),
   optparse::make_option(c("-r", "--rpath"), action="store", default=Sys.getenv("COVID_RSCRIPT_PATH","Rscript"), type = 'character', help = "path to R executable"),
   optparse::make_option(c("-n", "--n_slots"), action="store", default=100, type = 'integer', help = "Number of slots to run"),
-  optparse::make_option(c("-k", "--n_iter"), action="store", default=40, type = 'integer', help = "Number of iterations per slot"),
+  optparse::make_option(c("-k", "--n_iter"), action="store", default=300, type = 'integer', help = "Number of iterations per slot"),
   optparse::make_option(c("-j", "--n_cores"), action="store", default=parallel::detectCores() - 2, type = 'integer', help = "Number of cores to use")
 )
 
@@ -176,7 +176,7 @@ test_specs <- expand.grid(
   # Transformation on the confirmation rate
   conf_transform = c("none"),
   # Number of nodes
-  N = c(2),
+  N = c(50),
   # lik_cases = c("sqrtnorm-0.01", "sqrtnorm-0.05", "pois", "sqrtnorm-0.1"),
   # lik_deaths = c("sqrtnorm-0.01", "sqrtnorm-0.05", "pois", "sqrtnorm-0.1")
   lik_cases = c("sqrtnorm-0.01"),
@@ -267,7 +267,7 @@ for (test in tests) {
   
   # Initial seeding used for synthetic data
   seed_dates <- seq.Date(as.Date("2020-01-10"), as.Date("2020-01-31"), by = "1 days")
-  seedings <- tibble(date = sample(seed_dates, test$nnodes, replace = F),
+  seedings <- tibble(date = sample(seed_dates, test$nnodes, replace = TRUE),
                      place = 1:test$nnodes,
                      amount = rpois(test$nnodes, 6)) %>% 
     mutate(place = stringr::str_pad(place, 5, pad = "0"))
@@ -435,7 +435,7 @@ for (test in tests) {
   reticulate::import_from_path("Outcomes", path=opt$pipepath)
   reticulate::py_run_string(paste0("index = ", 1))
   reticulate::py_run_string(paste0("scenario = '", "test", "'"))
-  reticulate::py_run_string(paste0("stoch_traj_flag = ", 1))
+  reticulate::py_run_string(paste0("stoch_traj_flag = ", 0))
   ## pass prefix to python and use
   reticulate::py_run_string(paste0("deathrate = '", "med", "'"))
   reticulate::py_run_string(paste0("prefix = '", global_block_prefix, "'"))
