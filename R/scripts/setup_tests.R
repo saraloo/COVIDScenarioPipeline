@@ -20,14 +20,15 @@ option_list = list(
   optparse::make_option(c("-r", "--rpath"), action="store", default=Sys.getenv("COVID_RSCRIPT_PATH","Rscript"), type = 'character', help = "path to R executable"),
   optparse::make_option(c("-n", "--n_slots"), action="store", default=100, type = 'integer', help = "Number of slots to run"),
   optparse::make_option(c("-k", "--n_iter"), action="store", default=300, type = 'integer', help = "Number of iterations per slot"),
-  optparse::make_option(c("-j", "--n_cores"), action="store", default=parallel::detectCores() - 2, type = 'integer', help = "Number of cores to use")
+  optparse::make_option(c("-j", "--n_cores"), action="store", default=parallel::detectCores() - 2, type = 'integer', help = "Number of cores to use"),
+  optparse::make_option(c("-s", "--suffix"), action="store", default=NULL, type = 'character', help = "Number of cores to use")
 )
 
 parser <- optparse::OptionParser(option_list=option_list)
 opt <- optparse::parse_args(parser)
 
 source("COVIDScenarioPipeline/R/pkgs/inference/R/InferenceTest.R")
-
+  
 # File names
 config_file <- "configs/config_test_inference.yml"
 setup <- "testInference"
@@ -140,7 +141,7 @@ buildTest <- function(param_vec, suffix = NULL) {
   # test$runid <- glue::glue("N{test$nnodes}_npis-sd{test$pert_sd_npis}-b{test$pert_bound_npis}_conf-sd{test$pert_sd_conf}-b{test$pert_bound_conf}-t{test$confirmation_transform}") %>% 
   #   str_replace_all("\\.", "")
   # 
-  test$runid <- glue::glue("N{test$nnodes}_npis-sd{test$pert_sd_npis}_conf-sd{test$pert_sd_conf}_lc-{test$lik_cases}_ld-{test$lik_deaths}") %>% 
+  test$runid <- glue::glue("N{test$nnodes}_npis-sd{test$pert_sd_npis}_conf-sd{test$pert_sd_conf}_lc-{test$lik_cases}_ld-none") %>% 
     str_replace_all("\\.", "")
   
   if(!is.null(suffix)) {
@@ -199,7 +200,7 @@ test_specs <- test_specs %>%
 
 
 # Build tests specifications
-tests <- apply(test_specs, 1, buildTest)
+tests <- apply(test_specs, 1, buildTest, suffix = opt$suffix)
 names(tests) <- map_chr(tests, "runid")
 
 # Set reference data to use

@@ -6,7 +6,7 @@ output:
 params:
   redo: TRUE
   stat4plot: bias
-  N4plot: N2
+  N4plot: N50
 ---
 
 This notebook summarizes the results of tests of the inference setup. 
@@ -14,7 +14,6 @@ This notebook summarizes the results of tests of the inference setup.
 ```{r preamble, message=FALSE, warning=FALSE, include=FALSE}
 library(tidyverse)
 library(foreach)
-library(doSNOW)
 
 # knitr::opts_knit$set(root.dir = "..") ##Assumes we are in the notebook directory
 knitr::opts_chunk$set(
@@ -31,11 +30,11 @@ redo <- params$redo
 stat4plot <- params$stat4plot
 N4plot <- params$N4plot
 
-all_tests <- yaml::read_yaml("../all_tests.yml")
+all_tests <- yaml::read_yaml("../../all_tests.yml")
 ref_tests <- which(map_lgl(all_tests, ~ .$runid == .$ref_data_runid))
-out_dir <- "outputs"
-path_to_data <- "data/"
-configs <- map(all_tests[ref_tests], ~covidcommon::load_config(str_c("../", .$config_file)))
+out_dir <- "../../notebooks/outputs"
+path_to_data <- "../data/"
+configs <- map(all_tests[ref_tests], ~covidcommon::load_config(str_c("../../", .$config_file)))
 
 getSpecs <- function(df) {
   df %>% 
@@ -189,7 +188,7 @@ if (grp_by_incid) {
 
 
 
-```{r npi fit, echo=FALSE, fig.cap="Figure 4. NPI reductions. Black dotted lines correspond to the density of the initial random draw of the parameters as specified in the config, colored lines the posterior densities, and vertical dashed lines the values used to generate the data.", fig.height=10, fig.width=10, message=FALSE, warning=FALSE}
+```{r npi fit, echo=FALSE, fig.cap="Figure 4. NPI reductions. Black dotted lines correspond to the density of the initial random draw of the parameters as specified in the config, colored lines the posterior densities, and vertical dashed lines the values used to generate the data.", fig.height=6, fig.width=10, message=FALSE, warning=FALSE}
 
 prodMinusOne <- function(x) {
   prod(1-x) 
