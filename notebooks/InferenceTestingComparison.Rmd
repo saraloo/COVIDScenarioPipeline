@@ -1,0 +1,462 @@
+---
+title: "Inference Testing"
+output:
+  html_document:
+    df_print: paged
+params:
+  redo: TRUE
+  stat4plot: bias
+  N4plot: N2
+---
+
+This notebook summarizes the results of tests of the inference setup. 
+
+```{r preamble, message=FALSE, warning=FALSE, include=FALSE}
+library(tidyverse)
+library(foreach)
+library(doSNOW)
+
+# knitr::opts_knit$set(root.dir = "..") ##Assumes we are in the notebook directory
+knitr::opts_chunk$set(
+  echo = FALSE,
+  fig.align = "center",
+  message = FALSE,
+  warning = FALSE,
+  cache.lazy = FALSE,
+  bitmapType = "cairo"
+)
+Sys.setlocale("LC_ALL", "C")
+
+redo <- params$redo
+stat4plot <- params$stat4plot
+N4plot <- params$N4plot
+
+all_tests <- yaml::read_yaml("../all_tests.yml")
+ref_tests <- which(map_lgl(all_tests, ~ .$runid == .$ref_data_runid))
+out_dir <- "outputs"
+path_to_data <- "data/"
+configs <- map(all_tests[ref_tests], ~covidcommon::load_config(str_c("../", .$config_file)))
+
+getSpecs <- function(df) {
+  df %>% 
+    group_by(runid) %>% 
+    mutate(nnodes = str_split(runid, "_")[[1]][1],
+           npi_specs = str_split(runid, "_")[[1]][2],
+           npi_sd = str_split(npi_specs, "-")[[1]][2],
+           conf_specs = str_split(runid, "_")[[1]][3],
+           conf_sd = str_split(conf_specs, "-")[[1]][2])
+}
+```
+
+
+
+
+```{r synthetic data multi, echo=FALSE, fig.cap="Figure 1. Synthetic data", fig.width=10, fig.height=5}
+
+to_fit <- map_df(configs, function(x) read_csv(str_c("../", str_replace(x$filtering$data_path, "data", path_to_data))) %>%  rename(geoid = FIPS) %>% 
+                   pivot_longer(cols = c(-date, -geoid), values_to="N", names_to="var") %>% 
+                   mutate(geoid = factor(geoid),
+                          nnodes = str_split(x$filtering$data_path, "_")[[1]][2])
+)
+
+grp_by_incid <- length(unique(to_fit$geoid)) > 5
+
+if (grp_by_incid) {
+  # Make geoid groups by number of cases
+  incid_grps <- to_fit %>%
+    filter(var == "incidI") %>% 
+    group_by(geoid) %>% 
+    summarise(Ntot = sum(N)) %>% 
+    mutate(incid_grp = cut(Ntot, 3,  labels = c("low", "med", "high"))) %>% 
+    ungroup() %>% 
+    select(geoid, incid_grp) 
+  
+  to_fit <- incid_grps %>% 
+    left_join(to_fit, .)
+}
+
+
+##Plot the epidemic to fit
+p_data <- to_fit %>%
+  filter(nnodes == N4plot, var %in% c("incidI", "incidC", "incidD")) %>% 
+  ggplot(aes(x=date,y=N, color=factor(geoid))) +
+  geom_line(alpha=.5) +
+  theme_bw()
+
+if (grp_by_incid) {
+  p_data + facet_grid(var~incid_grp, scales = "free") + guides(color = "none")
+} else {
+  p_data + facet_wrap(~var, scales = "free")
+}
+
+```
+```{r echo=FALSE, fig.cap="Figure 2. Data an simulated health outcomes. Ribbons give 95% simulation envelops, points correspond to the generated data., colors indicate geoids. Geoids were subdivided into three groups based on cumulative incidence (low, med, high) for plotting.", fig.height=9, fig.width=9}
+outfile_sims <- map_chr(all_tests, ~glue::glue("{out_dir}/sim_stats_{.$setup}_{.$scenario}_{.$runid}.csv"))
+sim_stats_file <- glue::glue("{out_dir}/sim_stats.parquet")
+
+if (redo | !file.exists(sim_stats_file)) {
+  sim_stats <- map_df(all_tests, 
+                      function(x) {
+                        f <- glue::glue("{out_dir}/sim_stats_{x$setup}_{x$scenario}_{x$runid}.csv")
+                        if (file.exists(f))
+                          read_csv(f) %>% 
+                          mutate(runid = x$runid,
+                                 nnodes = str_c("N", x$nnodes))
+                      })
+  
+  arrow::write_parquet(sim_stats, sim_stats_file)
+} else {
+  sim_stats <- arrow::read_parquet(sim_stats_file)
+}
+
+# Variables to keep for plots
+var_to_plot <- c("incidD", "incidC", "incidI")
+# Number of test runids
+n_runid <- length(unique(sim_stats$runid))
+
+if (grp_by_incid) {
+  sim_stats <- inner_join(sim_stats, incid_grps)
+}
+
+p_sim <- sim_stats %>%
+  filter(geoid != "all", var %in% var_to_plot, nnodes == N4plot) %>%
+  ggplot(aes(x = time)) +
+  geom_ribbon(aes(ymin = q025, ymax = q975, fill = geoid), alpha = .2) +
+  # geom_ribbon(aes(ymin = q25, ymax = q75, fill = geoid), alpha = .2) +
+  geom_point(data = filter(to_fit, var %in% var_to_plot, nnodes == N4plot), aes(x = as.POSIXct(date), y = N, color = geoid), size = .3) +
+  guides(fill = "none", color = "none") +
+  theme_bw()
+
+if (grp_by_incid) {
+  p_sim +
+    facet_wrap(var + runid ~ incid_grp, scales = "free", ncol = ifelse(n_runid > 1, 9, 3), drop = T)
+} else {
+  p_sim + facet_wrap(var ~ runid, scales = "free", ncol = ifelse(n_runid > 1, 3, 1))
+}
+```
+
+
+```{r sim errors, fig.height=12, fig.width=10, fig.cap="Figure 3. Algorithm convergence in terms of simulation errorrs. Convergence is shown in terms of the median bias and median absolute error (mae) across slots as a function of MCMC iterations. Colors indicate geoids which were subdivided into three groups based on cumulative incidence (low, med, high) for plotting."}
+
+sim_errors_file <- glue::glue("{out_dir}/sim_errors.parquet")
+
+if (redo | !file.exists(sim_errors_file)) {
+  sim_errors <- map_df(all_tests, 
+                       function(x) {
+                         f <- glue::glue("{out_dir}/sims_all_errors_{x$setup}_{x$scenario}_{x$runid}.csv")
+                         if (file.exists(f)) 
+                           read_csv(f) %>% 
+                           mutate(runid = x$runid)}) %>% 
+    mutate(geoid = as.factor(geoid)) 
+  
+  sim_errors <- gather(sim_errors, stat, value, -var, -geoid, -n, -it, -sim, -runid)
+  
+  arrow::write_parquet(sim_errors, sim_errors_file)
+} else {
+  sim_errors <- arrow::read_parquet(sim_errors_file)
+}
+
+# Compute the median error
+sim_error_median <- sim_errors %>% 
+  group_by(it, var, runid, stat, geoid) %>% 
+  summarise(median = median(value))
+# Get specifications of runids
+sim_error_median <- getSpecs(sim_error_median)
+if (grp_by_incid) {
+  sim_error_median <- inner_join(sim_error_median, incid_grps)
+}
+
+intercepts <- tibble(y  = 0, stat = params$stat4plot, var = unique(sim_error_median$var))
+
+p_sim_err <- sim_error_median %>%  
+  filter(stat == stat4plot) %>% 
+  ggplot(aes(x = it, y = median, color = geoid)) +
+  geom_line() +
+  geom_hline(data = intercepts, aes(yintercept = y), color = "black", lty = 2) +
+  theme_bw() +
+  guides(color=guide_legend(ncol=2)) +
+  labs(x = "iteration", y = glue::glue("median {stat4plot} across slots")) +
+  guides(color = "none")
+
+if (grp_by_incid) {
+  p_sim_err + facet_wrap(var + runid ~ incid_grp, scales = "free", ncol = ifelse(n_runid > 1, 6, 3), drop = T)
+} else {
+  p_sim_err + facet_wrap(var ~ runid, scales = "free", ncol = ifelse(n_runid > 1, 3, 1))
+}
+
+```
+
+
+
+
+```{r npi fit, echo=FALSE, fig.cap="Figure 4. NPI reductions. Black dotted lines correspond to the density of the initial random draw of the parameters as specified in the config, colored lines the posterior densities, and vertical dashed lines the values used to generate the data.", fig.height=10, fig.width=10, message=FALSE, warning=FALSE}
+
+prodMinusOne <- function(x) {
+  prod(1-x) 
+}
+
+npis_file <- glue::glue("{out_dir}/npis.csv")
+
+if (redo | !file.exists(npis_file)) {
+  
+  npis <-  map_df(all_tests, 
+                  function(x) {
+                    f <- glue::glue("{out_dir}/npis_{x$setup}_{x$scenario}_{x$runid}.csv")
+                    if (file.exists(f))
+                      read_csv(f) %>% 
+                      mutate(runid = x$runid)}
+  ) %>% 
+    mutate(geoid = as.factor(geoid)) %>% 
+    select(geoid, npi_name, reduction, sim, runid)
+  
+  npis <- npis %>% 
+    ungroup() %>% 
+    rbind(
+      npis %>% 
+        group_by(geoid, sim, runid) %>% 
+        summarise(reduction = 1-prodMinusOne(reduction)) %>% 
+        mutate(npi_name = str_c("reff", geoid)) %>% 
+        select(geoid, npi_name, reduction, sim, runid) %>% 
+        ungroup()
+    )
+  
+  npis <- getSpecs(npis)
+  write_csv(npis, npis_file)
+  
+} else {
+  npis <- read_csv(npis_file)
+}
+
+# get the npi name without the geoid 
+npis <- npis %>% 
+  mutate(npi = str_replace_all(npi_name, "[0-9]", ""))
+
+npis_generation <- read_csv(glue::glue("../{path_to_data}/generated/generate_testInference_{all_tests[[1]]$ref_data_runid}_snpi.csv"))
+
+npis_generation <- npis_generation %>% 
+  select(geoid, npi_name, reduction) %>% 
+  rbind(
+    npis_generation %>% 
+      group_by(geoid) %>% 
+      summarise(reduction = 1-prodMinusOne(reduction)) %>% 
+      mutate(npi_name = str_c("reff", geoid)) %>% 
+      select(geoid, npi_name, reduction) %>% 
+      ungroup()
+  ) %>% 
+  mutate(npi = str_replace_all(npi_name, "[0-9]", ""))
+
+
+# Generate priors
+npi_priors <- pmap_df(list(x = configs[[1]]$interventions$settings, 
+                           y = names(configs[[1]]$interventions$settings)),
+                      function(x, y) {
+                        if (x$template == "ReduceR0") {
+                          pert_dist <- covidcommon::as_random_distribution(x[['value']])
+                          tibble(reduction = pert_dist(100), npi_name = y)
+                        }
+                      }) %>% 
+  mutate(npi = str_replace_all(npi_name, "[0-9]", ""),
+         geoid = stringr::str_pad( str_replace_all(npi_name, npi, ""), 5, pad = "0"))
+
+if (grp_by_incid) {
+  npis <- npis %>% inner_join(incid_grps)
+  npis_generation <- npis_generation %>% inner_join(incid_grps)
+  npi_priors <- npi_priors %>% inner_join(incid_grps)
+}
+
+p_npis <- npis %>% 
+  filter(nnodes == N4plot) %>% 
+  ggplot(aes(x = reduction, color = geoid)) +
+  geom_density() +
+  geom_density(data = npi_priors, color = "black", lty = 3, size = .5) +
+  geom_vline(data = npis_generation, aes(xintercept = reduction, color = geoid), lty = 2, size = .5) +
+  guides(color = "none") +
+  theme_bw()
+
+if (grp_by_incid) {
+  p_npis + facet_wrap(npi + runid ~ incid_grp, scales = "free_y", ncol = ifelse(n_runid > 1, 6, 3), drop = T)
+} else {
+  p_npis + facet_wrap(npi ~ runid, scales = "free", ncol = ifelse(n_runid > 1, 3, 1))
+}
+
+```
+
+```{r npi errors, fig.height=10, fig.width=10, fig.cap="Figure 5. Algorithm convergence in terms of NPI parameter errorrs. Convergence is shown across slots as a function of MCMC iterations."}
+# 
+# npis_errors_file <- "outputs/npi_errors.parquet"
+# 
+# if (redo | !file.exists(npis_errors_file)) {
+#   
+#   npi_errors <- map_df(all_tests, 
+#                        function(x){
+#                          f <- glue::glue("{out_dir}/npis_all_errors_{x$setup}_{x$scenario}_{x$runid}.csv")
+#                          if(file.exists(f))
+#                            read_csv(f) %>% 
+#                            mutate(runid = x$runid)}) %>% 
+#     select(-n)
+#   
+#   npi_errors <- gather(npi_errors, stat, value, -var, -it, -sim, -runid)
+#   
+#   arrow::write_parquet(npi_errors, npis_errors_file)
+#   
+# } else {
+#   npi_errors <- arrow::read_parquet(npis_errors_file)
+# }
+# 
+# npi_errors_median <- npi_errors %>% 
+#   group_by(it, var, runid, stat) %>% 
+#   summarise(median = median(value)) %>% 
+#   mutate(geoid = str_extract(var, "\\d{1,2}"),
+#          var = str_replace(var, geoid, ""))
+# 
+# npi_errors_median <- getSpecs(npi_errors_median)
+# 
+# intercepts_npis <- tibble(y  = 0, stat = "bias", geoid = unique(npi_errors_median$geoid)) %>% 
+#   inner_join(tibble(y  = 0, stat = "bias", var = unique(npi_errors_median$var)))
+# 
+# npi_errors_median %>%  
+#   filter(nnodes == N4plot, stat == stat4plot) %>% 
+#   ggplot(aes(x = it, y = median, color = runid)) +
+#   geom_line() +
+#   geom_hline(data = intercepts_npis, aes(yintercept = y), color = "black", lty = 2) +
+#   facet_grid(var + geoid ~ npi_sd + conf_sd, scales = "free", labeller = label_both) +
+#   theme_bw() +
+#   labs(x = "iteration", y = glue::glue("{stat4plot} across slots"))
+```
+
+
+```{r seeding, fig.height=5, fig.width=6, fig.cap="Figure 4. Seedings. Colored lines the posterior densities, and the dotted vertical lines are the values used to generate the data"}
+# outfile_seeding <- glue::glue("{out_dir}/seedings_{setup}_{scenario}_{runid}.csv")
+# 
+# seedings <- read_csv(outfile_seeding) %>% 
+#   mutate(place = as.factor(place))
+# 
+# 
+# # Initila seeding
+# initial_seeding <- read_csv("../model_output/seed/generate_000000000.generation.seed.csv")
+# 
+# seedings %>% 
+#   ggplot(aes(x = amount, color = place)) +
+#   geom_density() +
+#   geom_vline(data = initial_seeding, aes(xintercept = amount), lty = 2, size = .4) +
+#   facet_wrap(~place) +
+#   theme_bw()
+
+# seedings %>% 
+#   ggplot(aes(x = date,color = place)) +
+#   geom_density() +
+#   geom_vline(data = initial_seeding, aes(xintercept = date), lty = 2, size = .4) +
+#   facet_wrap(~place) +
+#   theme_bw()
+
+```
+
+```{r hpar, echo=FALSE, fig.height=7, fig.width=7, fig.cap="Figure 6. Hospitalization parameters. Black lines dotted are the initial draws, colored lines the posterior densities, and the dotted vertical lines are the values used to generate the data."}
+
+hpar_file <- glue::glue("{out_dir}/hpar.csv")
+
+if (redo | !file.exists(hpar_file)) {
+  
+  hpar <- map_df(all_tests, 
+                 function(x) {
+                   f <- glue::glue("{out_dir}/hpar_{x$setup}_{x$scenario}_{x$runid}.csv")
+                   if (file.exists(f))
+                     read_csv(f) %>% 
+                     mutate(runid = x$runid)}) %>% 
+    mutate(geoid = as.factor(geoid))
+  
+  hpar <- getSpecs(hpar)
+  write_csv(hpar, hpar_file)
+  
+} else {
+  hpar <- read_csv(hpar_file)
+}
+# Generate priors
+hpar_priors <- pmap_df(list(x = configs[[1]]$outcomes$settings$med, 
+                            y = names(configs[[1]]$outcomes$settings$med)),
+                       function(x, y) {
+                         if ("perturbation" %in% names(x$probability)) {
+                           value_dist <- covidcommon::as_random_distribution(x$probability$value)
+                           tibble(value = value_dist(1e3), outcome = y, source = x$source)
+                         }
+                       })
+
+hpar_generation <- read_csv(glue::glue("../{path_to_data}/generated/generate_testInference_{all_tests[[1]]$ref_data_runid}_hpar.csv"))
+
+
+if (grp_by_incid) {
+  hpar <- hpar %>% inner_join(incid_grps)
+  hpar_generation <- hpar_generation %>% inner_join(incid_grps)
+}
+
+# Not that this assumes the only outcomes parameter inferred upon is the confirmation rate
+p_hpar <- hpar %>% 
+  filter((outcome %in% hpar_priors$outcome) & (source %in% hpar$source), nnodes == N4plot) %>% 
+  ggplot(aes(x = value)) +
+  geom_density(data = hpar_priors, color = "black", lty = 3, size = .4) +
+  geom_vline(data = hpar_generation  %>%
+               filter((outcome %in% hpar_priors$outcome) & (source %in% hpar$source)),
+             aes(xintercept = value), lty = 2, size = .5) +
+  geom_density(aes(color = geoid)) +
+  guides(color = "none") +
+  coord_cartesian(xlim = c(0,1)) +
+  theme_bw()
+
+if (grp_by_incid) {
+  p_hpar + facet_wrap( runid ~ incid_grp, scales = "free_y", ncol = 3, drop = T)
+} else {
+  p_hpar + facet_wrap( ~ runid, scales = "free", labeller = label_both)
+}
+```
+
+
+```{r hpar errors, fig.height=10, fig.width=10, fig.cap="Figure 5. Algorithm convergence in terms of NPI parameter errorrs. Convergence is shown across slots as a function of MCMC iterations."}
+
+hpar_errors_file <- glue::glue("{out_dir}/hpar_errors.parquet")
+
+if (redo | !file.exists(hpar_errors_file)) {
+  
+  hpar_errors <- map_df(all_tests, 
+                        function(x) {
+                          f <- glue::glue("{out_dir}/hpar_all_errors_{x$setup}_{x$scenario}_{x$runid}.csv")
+                          if (file.exists(f))
+                            read_csv(f) %>% 
+                            mutate(runid = x$runid)}) %>% 
+    select(-n)
+  
+  hpar_errors <- gather(hpar_errors, stat, value, -var, -it, -sim, -runid, -geoid)
+  
+  arrow::write_parquet(hpar_errors, hpar_errors_file)
+} else {
+  hpar_errors <- arrow::read_parquet(hpar_errors_file)
+}
+
+hpar_errors_median <- hpar_errors %>% 
+  group_by(it, var, runid, stat, geoid) %>% 
+  summarise(median = median(value))
+
+hpar_errors_median <- getSpecs(hpar_errors_median)
+
+if (grp_by_incid) {
+  hpar_errors_median <- hpar_errors_median %>% inner_join(incid_grps)
+}
+
+intercepts_hpar <- tibble(y  = 0, stat = params$stat4plot, geoid = unique(hpar_errors_median$geoid)) 
+
+p_hpar_err <- hpar_errors_median %>%  
+  filter(nnodes == N4plot, stat == stat4plot) %>% 
+  ggplot(aes(x = it, y = median, color = geoid)) +
+  geom_line() +
+  geom_hline(data = intercepts_hpar, aes(yintercept = y), color = "black", lty = 2) +
+  theme_bw() +
+  labs(x = "iteration", y = glue::glue("{stat4plot} across slots")) +
+  guides(color="none") 
+
+if (grp_by_incid) {
+  p_hpar_err + facet_grid(runid ~ incid_grp, scales = "free", drop = T)
+} else {
+  p_hpar_err + facet_wrap( ~ runid, scales = "free", ncol = ifelse(n_runid > 1, 3, 1))
+}
+
+```
+
