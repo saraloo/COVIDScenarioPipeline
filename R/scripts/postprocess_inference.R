@@ -13,7 +13,8 @@ option_list = list(
   optparse::make_option(c("-t", "--test"), action = "store", default = 1, type='integer', help = "Test id to compile"),
   optparse::make_option(c("-i", "--do_int"), action = "store", default = FALSE, type='logical', help = "Postprocess intermediate trajectories"),
   optparse::make_option(c("-r", "--redo"), action = "store", default = FALSE, type='logical', help = "Postprocess intermediate trajectories"),
-  optparse::make_option(c("-j", "--jobs"), action = "store", default = parallel::detectCores(), type = 'integer', help = "Number of jobs to run in parallel")
+  optparse::make_option(c("-j", "--jobs"), action = "store", default = parallel::detectCores(), type = 'integer', help = "Number of jobs to run in parallel"),
+  optparse::make_option(c("-a", "--all_tests"), action = "store", default ="all_tests.yml", type = 'character', help = "file with all tests to run")
 )
 
 parser <- optparse::OptionParser(option_list=option_list)
@@ -22,7 +23,7 @@ do_int <- opt$do_int
 redo <- opt$redo
 
 # Load test inforamtion
-all_tests <- yaml::read_yaml("all_tests.yml")
+all_tests <- yaml::read_yaml(opt$all_tests)
 test <- all_tests[[opt$test]]
 test_name <- names(all_tests)
 runid <- test$runid
