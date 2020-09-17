@@ -22,6 +22,7 @@ option_list = list(
   optparse::make_option(c("-k", "--n_iter"), action="store", default=300, type = 'integer', help = "Number of iterations per slot"),
   optparse::make_option(c("-j", "--n_cores"), action="store", default=parallel::detectCores() - 2, type = 'integer', help = "Number of cores to use"),
   optparse::make_option(c("-s", "--suffix"), action="store", default=NULL, type = 'character', help = "Number of cores to use")
+  optparse::make_option(c("-t", "--stoch_traj_flag"), action="store", default=Sys.getenv("COVID_STOCHASTIC",TRUE), type='logical', help = "Stochastic SEIR and outcomes trajectories if true"),
 )
 
 parser <- optparse::OptionParser(option_list=option_list)
@@ -436,7 +437,7 @@ for (test in tests) {
   reticulate::import_from_path("Outcomes", path=opt$pipepath)
   reticulate::py_run_string(paste0("index = ", 1))
   reticulate::py_run_string(paste0("scenario = '", "test", "'"))
-  reticulate::py_run_string(paste0("stoch_traj_flag = ", 0))
+  reticulate::py_run_string(paste0("stoch_traj_flag = ", stoch_traj_flag))
   ## pass prefix to python and use
   reticulate::py_run_string(paste0("deathrate = '", "med", "'"))
   reticulate::py_run_string(paste0("prefix = '", global_block_prefix, "'"))
