@@ -7,6 +7,7 @@ params:
   redo: TRUE
   stat4plot: bias
   N4plot: N50
+  all_tests: all_tests.yml
 ---
 
 This notebook summarizes the results of tests of the inference setup. 
@@ -30,7 +31,7 @@ redo <- params$redo
 stat4plot <- params$stat4plot
 N4plot <- params$N4plot
 
-all_tests <- yaml::read_yaml("../../all_tests.yml")
+all_tests <- yaml::read_yaml(str_c("../../", params$all_tests))
 ref_tests <- which(map_lgl(all_tests, ~ .$runid == .$ref_data_runid))
 out_dir <- "../../notebooks/outputs"
 path_to_data <- "../data/"
