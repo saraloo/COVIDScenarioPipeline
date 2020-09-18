@@ -21,8 +21,8 @@ option_list = list(
   optparse::make_option(c("-n", "--n_slots"), action="store", default=100, type = 'integer', help = "Number of slots to run"),
   optparse::make_option(c("-k", "--n_iter"), action="store", default=300, type = 'integer', help = "Number of iterations per slot"),
   optparse::make_option(c("-j", "--n_cores"), action="store", default=parallel::detectCores() - 2, type = 'integer', help = "Number of cores to use"),
-  optparse::make_option(c("-s", "--suffix"), action="store", default=NULL, type = 'character', help = "Number of cores to use")
-  optparse::make_option(c("-t", "--stoch_traj_flag"), action="store", default=Sys.getenv("COVID_STOCHASTIC",TRUE), type='logical', help = "Stochastic SEIR and outcomes trajectories if true"),
+  optparse::make_option(c("-s", "--suffix"), action="store", default=NULL, type = 'character', help = "Number of cores to use"),
+  optparse::make_option(c("-t", "--stoch_traj_flag"), action="store", default=Sys.getenv("COVID_STOCHASTIC",TRUE), type='logical', help = "Stochastic SEIR and outcomes trajectories if true")
 )
 
 parser <- optparse::OptionParser(option_list=option_list)
@@ -239,7 +239,7 @@ for (test in tests) {
   
   ## Spatial setup - - - -
   if(!dir.exists(data_basepath)) {
-    dir.create(data_basepath,recursive=TRUE)
+    dir.create(data_basepath)
   }
   
   config$spatial_setup <- list(
@@ -406,11 +406,9 @@ for (test in tests) {
                                                              param = as.numeric(lik[2]))
   }
   
-  if(nchar(test$lik_deaths) > 0){
-    lik_deaths <- str_split(test$lik_deaths, "-")[[1]]
-    config$filtering$statistics$sum_deaths$likelihood <- list(dist = lik_deaths[1],
+  lik_deaths <- str_split(test$lik_deaths, "-")[[1]]
+  config$filtering$statistics$sum_deaths$likelihood <- list(dist = lik_deaths[1],
                                                             param = as.numeric(lik_deaths[2]))
-  }
   config$outcomes$param_place_file <- hpar_inference_file
   yaml::write_yaml(config, file = config_file_out_inference)
   
@@ -437,7 +435,7 @@ for (test in tests) {
   reticulate::import_from_path("Outcomes", path=opt$pipepath)
   reticulate::py_run_string(paste0("index = ", 1))
   reticulate::py_run_string(paste0("scenario = '", "test", "'"))
-  reticulate::py_run_string(paste0("stoch_traj_flag = ", stoch_traj_flag))
+  reticulate::py_run_string(paste0("stoch_traj_flag = ", ifelse(opt$stoch_traj_flag,1,0)))
   ## pass prefix to python and use
   reticulate::py_run_string(paste0("deathrate = '", "med", "'"))
   reticulate::py_run_string(paste0("prefix = '", global_block_prefix, "'"))
