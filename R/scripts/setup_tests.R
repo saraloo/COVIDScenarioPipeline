@@ -28,7 +28,7 @@ parser <- optparse::OptionParser(option_list=option_list)
 opt <- optparse::parse_args(parser)
 
 source("COVIDScenarioPipeline/R/pkgs/inference/R/InferenceTest.R")
-  
+
 # File names
 config_file <- "configs/config_test_inference.yml"
 setup <- "testInference"
@@ -141,7 +141,7 @@ buildTest <- function(param_vec, suffix = NULL) {
   # test$runid <- glue::glue("N{test$nnodes}_npis-sd{test$pert_sd_npis}-b{test$pert_bound_npis}_conf-sd{test$pert_sd_conf}-b{test$pert_bound_conf}-t{test$confirmation_transform}") %>% 
   #   str_replace_all("\\.", "")
   # 
-  test$runid <- glue::glue("N{test$nnodes}_npis-sd{test$pert_sd_npis}_conf-sd{test$pert_sd_conf}_lc-{test$lik_cases}_ld-none") %>% 
+  test$runid <- glue::glue("N{test$nnodes}_npis-sd{test$pert_sd_npis}_conf-sd{test$pert_sd_conf}_lc-{test$lik_cases}_ld-{test$lik_deaths}") %>% 
     str_replace_all("\\.", "")
   
   if(!is.null(suffix)) {
@@ -181,7 +181,7 @@ test_specs <- expand.grid(
   # lik_cases = c("sqrtnorm-0.01", "sqrtnorm-0.05", "pois", "sqrtnorm-0.1"),
   # lik_deaths = c("sqrtnorm-0.01", "sqrtnorm-0.05", "pois", "sqrtnorm-0.1")
   lik_cases = c("sqrtnorm-0.01"),
-  lik_deaths = c("")
+  lik_deaths = c("sqrtnorm-0.01")
 ) %>% 
   # set whether the run is the reference for fitting
   group_by(N) %>% 
@@ -214,7 +214,11 @@ for (i in unique(test_specs[["N"]])) {
 }
 
 # Write
-yaml::write_yaml(tests, "all_tests.yml")
+if (is.null(opt$suffix)) {
+  yaml::write_yaml(tests, "all_tests.yml")
+} else {
+  yaml::write_yaml(tests, glue::glue("all_tests_{opt$suffix}.yml"))
+}
 
 # Setup ------------------------------------------------------------------------
 
@@ -376,6 +380,11 @@ for (test in tests) {
   config$filtering$statistics$sum_cases$likelihood <- list(dist = "sqrtnorm",
                                                            param = .1)
   
+  # If present Remove likelihood on infections
+  if (any(str_detect(names(config$filtering$statistics), "infect"))) {
+    config$filtering$statistics$sum_infections <- NULL
+  }
+  
   if (test$fit_confirmation) {
     pert_params_conf <- list(
       distribution = "truncnorm",
@@ -408,7 +417,7 @@ for (test in tests) {
   if(nchar(test$lik_deaths) > 0){
     lik_deaths <- str_split(test$lik_deaths, "-")[[1]]
     config$filtering$statistics$sum_deaths$likelihood <- list(dist = lik_deaths[1],
-                                                            param = as.numeric(lik_deaths[2]))
+                                                              param = as.numeric(lik_deaths[2]))
   }
   config$outcomes$param_place_file <- hpar_inference_file
   yaml::write_yaml(config, file = config_file_out_inference)
@@ -436,7 +445,7 @@ for (test in tests) {
   reticulate::import_from_path("Outcomes", path=opt$pipepath)
   reticulate::py_run_string(paste0("index = ", 1))
   reticulate::py_run_string(paste0("scenario = '", "test", "'"))
-  reticulate::py_run_string(paste0("stoch_traj_flag = ", 0))
+  reticulate::py_run_string(paste0("stoch_traj_flag = ", 1))
   ## pass prefix to python and use
   reticulate::py_run_string(paste0("deathrate = '", "med", "'"))
   reticulate::py_run_string(paste0("prefix = '", global_block_prefix, "'"))
@@ -506,7 +515,12 @@ if (do_plots) {
 }
 
 # Write run_tests.sh -----------------------------------------------------------
-run_file <- "run_tests.sh"
+# Write
+if (is.null(opt$suffix)) {
+  run_file <- "run_tests.sh"
+} else {
+  run_file <-  glue::glue("run_tests_{opt$suffix}.sh")
+}
 
 write("#!/bin/bash", file = run_file)
 
