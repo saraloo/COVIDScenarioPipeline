@@ -534,8 +534,15 @@ for (i in 1:length(tests)) {
 
 
 for (i in 1:length(tests)) {
+  
+  cmd <-  glue::glue("Rscript COVIDScenarioPipeline/R/scripts/postprocess_inference.R -t {i} -i TRUE -r TRUE -j {opt$n_cores}")
+  
+  if (!is.null(opt$suffix)) {
+    cmd <- str_c(cmd, glue::glue(" -a all_tests_{opt$suffix}.yml"))
+  } 
+  
   write(
-    glue::glue("Rscript COVIDScenarioPipeline/R/scripts/postprocess_inference.R -t {i} -i TRUE -r TRUE -j {opt$n_cores}"), 
+    cmd, 
     run_file,
     append = T
   )
