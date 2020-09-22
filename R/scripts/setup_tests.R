@@ -167,11 +167,11 @@ buildTest <- function(param_vec, suffix = NULL) {
 # Test specifications
 test_specs <- expand.grid(
   # Standard deviation of perturbation kernel
-  pert_sd_npis = c(.1),
+  pert_sd_npis = c(.01, .05, .1, .2),
   # Bounds on truncated normal of perturbation kernel
   pert_bound_npis = c(1),
   # Standard deviation of perturbation kernel
-  pert_sd_conf = c(.1),
+  pert_sd_conf = c(.01, .05, .1, .2),
   # Bounds on truncated normal of perturbation kernel
   pert_bound_conf = c(1),
   # Transformation on the confirmation rate
