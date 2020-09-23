@@ -1,6 +1,7 @@
 # Setup to test inference on synthetic data
 # Preamble ---------------------------------------------------------------------
 options(warn=1)
+options(error=recover)
 options(error=quit,status=2)
 
 library(tidyverse)
@@ -14,15 +15,15 @@ library(inference)
 library(reticulate)
 
 option_list = list(
-  optparse::make_option(c("-t", "--test"), action="store", default=1, type='integer', help="Test id to compile"),
-  optparse::make_option(c("-p", "--pipepath"), action="store", type='character', help="path to the COVIDScenarioPipeline directory", default = Sys.getenv("COVID_PATH", "COVIDScenarioPipeline/")),
-  optparse::make_option(c("-y", "--python"), action="store", default=Sys.getenv("COVID_PYTHON_PATH","python3"), type='character', help="path to python executable"),
-  optparse::make_option(c("-r", "--rpath"), action="store", default=Sys.getenv("COVID_RSCRIPT_PATH","Rscript"), type = 'character', help = "path to R executable"),
-  optparse::make_option(c("-n", "--n_slots"), action="store", default=100, type = 'integer', help = "Number of slots to run"),
-  optparse::make_option(c("-k", "--n_iter"), action="store", default=300, type = 'integer', help = "Number of iterations per slot"),
-  optparse::make_option(c("-j", "--n_cores"), action="store", default=parallel::detectCores() - 2, type = 'integer', help = "Number of cores to use"),
-  optparse::make_option(c("-s", "--suffix"), action="store", default=NULL, type = 'character', help = "Number of cores to use"),
-  optparse::make_option(c("-t", "--stoch_traj_flag"), action="store", default=Sys.getenv("COVID_STOCHASTIC",TRUE), type='logical', help = "Stochastic SEIR and outcomes trajectories if true")
+  optparse::make_option(c("-T", "--test"),            action="store", default=1,                                                    type = 'integer',   help = "Test id to compile"),
+  optparse::make_option(c("-p", "--pipepath"),        action="store", default = Sys.getenv("COVID_PATH", "COVIDScenarioPipeline/"), type = 'character', help = "path to the COVIDScenarioPipeline directory"),
+  optparse::make_option(c("-y", "--python"),          action="store", default=Sys.getenv("COVID_PYTHON_PATH","python3"),            type = 'character', help = "path to python executable"),
+  optparse::make_option(c("-r", "--rpath"),           action="store", default=Sys.getenv("COVID_RSCRIPT_PATH","Rscript"),           type = 'character', help = "path to R executable"),
+  optparse::make_option(c("-n", "--n_slots"),         action="store", default=100,                                                  type = 'integer',   help = "Number of slots to run"),
+  optparse::make_option(c("-k", "--n_iter"),          action="store", default=300,                                                  type = 'integer',   help = "Number of iterations per slot"),
+  optparse::make_option(c("-j", "--n_cores"),         action="store", default=parallel::detectCores() - 2,                          type = 'integer',   help = "Number of cores to use"),
+  optparse::make_option(c("-s", "--suffix"),          action="store", default=NULL,                                                 type = 'character', help = "Number of cores to use"),
+  optparse::make_option(c("-t", "--stoch_traj_flag"), action="store", default=Sys.getenv("COVID_STOCHASTIC",TRUE),                  type = 'logical',   help = "Stochastic SEIR and outcomes trajectories if true")
 )
 
 parser <- optparse::OptionParser(option_list=option_list)
@@ -274,6 +275,7 @@ for (test in tests) {
                      amount = rpois(test$nnodes, 6)) %>% 
     mutate(place = stringr::str_pad(place, 5, pad = "0"))
   
+  print(paste("Writing csv", test$seeding_file))
   write_csv(seedings, path = paste(data_basepath, test$seeding_file, sep = "/"))
   
   ## Mobility matrix - - - -
@@ -344,6 +346,7 @@ for (test in tests) {
   config$interventions$scenarios <- list("test")
   config$interventions$settings <- generation_config
   config$outcomes$param_place_file <- hpar_generation_file
+  print(paste("param from file :",config$outcomes$param_from_file))
   yaml::write_yaml(config, file = config_file_out_generation)
   
   # Inference setup
@@ -443,7 +446,7 @@ for (test in tests) {
   
   py$onerun_SEIR(0, py$s)
   # py$onerun_SEIR_loadID(0, py$s, 0)
-  py$onerun_HOSP(0)
+  py$onerun_OUTCOMES(0)
   
   for (i in 1:opt$n_slots) {
     slot_prefix <- covidcommon::create_prefix(config$name, test$scenario, "med",test$runid,sep='/',trailing_separator='/')
