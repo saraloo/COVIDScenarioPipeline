@@ -56,7 +56,16 @@ def onerun_delayframe_outcomes_load_hpar(config, in_run_id, in_prefix, in_sim_id
         'parquet'
     )).to_pandas()
 
-    onerun_delayframe_outcomes(in_run_id, in_prefix, in_sim_id, out_run_id, out_prefix, out_sim_id, parameters, loaded_values, stoch_traj_flag)
+    outcomes, hpar = onerun_delayframe_outcomes(in_run_id, in_prefix, in_sim_id, out_run_id, out_prefix, out_sim_id, parameters, loaded_values, stoch_traj_flag)
+
+    print(loaded_values)
+    print(hpar)
+    print(loaded_values.columns)
+    print(hpar.columns)
+    print (loaded_values.index)
+    print (hpar.index)
+    hpar.index = loaded_values.index
+    print('Should be true', (loaded_values == hpar).all().all())
     return 1
 
 
@@ -163,6 +172,8 @@ def onerun_delayframe_outcomes(in_run_id, in_prefix, in_sim_id, out_run_id, out_
     # Write output
     write_outcome_sim(outcomes, out_run_id, out_prefix, out_sim_id)
     write_outcome_hpar(hpar, out_run_id, out_prefix, out_sim_id)
+
+    return outcomes, hpar
 
 
 def read_seir_sim(run_id, prefix, sim_id):
