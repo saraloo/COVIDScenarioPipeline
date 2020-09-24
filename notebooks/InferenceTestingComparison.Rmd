@@ -227,7 +227,81 @@ if (by_runid) {
 ```
 
 
+```{r finalerrorsim, echo=FALSE, message=FALSE, warning=FALSE, fig.cap="Final statistic (bias or mae) of the simualated trajectories rate. Boxplots show the distribution of values across geoids."}
 
+if (grp_by_incid) {
+  # Compute final errors
+  final_mean_stat_sims <- sim_errors %>% 
+    inner_join(incid_grps) %>% 
+    group_by(var, geoid, stat, runid, incid_grp) %>% 
+    slice_max(it, 1) %>% 
+    summarise(mean_stat = mean(value))
+  
+  ggplot(final_mean_stat_sims, aes(x = mean_stat, y = runid, color = runid)) +
+    geom_boxplot() +
+    theme_bw() +
+    facet_grid(stat~incid_grp) +
+    theme(axis.text.y =  element_blank(),
+          legend.position = "bottom")  +
+    guides(color=guide_legend(ncol=2)) +
+    labs(x = "Mean of statistic over the last iteration")
+  
+} else {
+  # Compute final errors
+  final_mean_stat_sims <- sim_errors %>% 
+    group_by(var, geoid, stat, runid) %>% 
+    slice_max(it, 1) %>% 
+    summarise(mean_stat = mean(value))
+  
+  ggplot(final_mean_stat_sims, aes(x = mean_stat, y = runid, color = runid)) +
+    geom_boxplot() +
+    theme_bw() +
+    facet_grid(stat~.) +
+    theme(axis.text.y =  element_blank(),
+          legend.position = "bottom")  +
+    guides(color=guide_legend(ncol=2)) +
+    labs(x = "Mean of statistic over the last iteration")
+}
+
+```
+
+
+```{r speedsim, echo=FALSE, message=FALSE, warning=FALSE, fig.cap="Mean number of iterations to readh the  final statistic (bias or mae) of the simualated trajectories rate. Boxplots show the distribution of values across geoids."}
+
+threshold <- 1.1
+speed_stats_sims <- sim_errors %>% 
+  inner_join(final_mean_stat_sims %>% 
+               group_by(var, geoid, stat) %>% 
+               summarise(target_stat = min(abs(mean_stat)))) %>% 
+  group_by(var, geoid, stat, runid, sim) %>% 
+  filter(value < threshold * target_stat) %>% 
+  group_by(var, geoid, stat, runid, sim) %>%
+  summarise(it = mean(it))
+
+if (grp_by_incid) {
+  speed_stats_sims %>% 
+    inner_join(incid_grps) %>% 
+    ggplot(aes(it, y = runid, color = runid)) +
+    geom_boxplot() +
+    facet_grid(incid_grp~stat+var) +
+    theme_bw() +
+    theme(axis.text.y =  element_blank(),
+          legend.position = "bottom")  +
+    guides(color=guide_legend(ncol=2)) +
+    labs(x = "Mean of number of iterations to be within 10% of the final value")
+} else {
+  speed_stats_sims %>% 
+    ggplot(aes(it, y = runid, color = runid)) +
+    geom_boxplot() +
+    facet_wrap(~stat) +
+    theme_bw() +
+    theme(axis.text.y =  element_blank(),
+          legend.position = "bottom")  +
+    guides(color=guide_legend(ncol=2)) +
+    labs(x = "Mean of number of iterations to be within 10% of the final value")
+}
+
+```
 
 ```{r npi fit, echo=FALSE, fig.cap="Figure 4. NPI reductions. Black dotted lines correspond to the density of the initial random draw of the parameters as specified in the config, colored lines the posterior densities, and vertical dashed lines the values used to generate the data.", fig.height=6, fig.width=10, message=FALSE, warning=FALSE}
 
@@ -511,7 +585,7 @@ if (grp_by_incid) {
 intercepts_hpar <- tibble(y  = 0, stat = params$stat4plot) 
 
 if (by_runid) {
-  hpar_errors_median <- hpar_errors_median %>% 
+  hpar_errors_median2 <- hpar_errors_median %>% 
     {
       if (grp_by_incid) {
         group_by(., it, var, runid, stat, npi_specs, conf_specs, incid_grp)
@@ -523,9 +597,10 @@ if (by_runid) {
               max = max(median),
               min = min(median))
   
-  p_hpar_err <- hpar_errors_median %>%  
+  p_hpar_err <- hpar_errors_median2 %>%  
     filter(stat == stat4plot) %>% 
     ggplot(aes(x = it, y = median, color = runid)) +
+    geom_ribbon(aes(ymin = min, ymax = max)) + 
     geom_line() +
     geom_hline(data = intercepts_hpar, aes(yintercept = y), color = "black", lty = 2) +
     theme_bw() +
@@ -557,6 +632,81 @@ if (by_runid) {
   }
 }
 
+
+```
+```{r speedhpar, echo=FALSE, message=FALSE, warning=FALSE, fig.width = 10, fig.height = 10, fig.cap="Final statistic (bias or mae) of the confirmation rate. Boxplots show the distribution of values across geoids."}
+
+if (grp_by_incid) {
+  # Compute final errors
+  final_mean_stat_hpar <- hpar_errors %>% 
+    inner_join(incid_grps) %>% 
+    group_by(var, geoid, stat, runid, incid_grp) %>% 
+    slice_max(it, 1) %>% 
+    summarise(mean_stat = mean(value))
+  
+  ggplot(final_mean_stat_hpar, aes(x = mean_stat, y = runid, color = runid)) +
+    geom_boxplot() +
+    theme_bw() +
+    facet_grid(stat~incid_grp) +
+    theme(axis.text.y =  element_blank(),
+          legend.position = "bottom")  +
+    guides(color=guide_legend(ncol=2)) +
+    labs(x = "Mean of statistic over the last iteration")
+  
+} else {
+  # Compute final errors
+  final_mean_stat_hpar <- hpar_errors %>% 
+    group_by(var, geoid, stat, runid) %>% 
+    slice_max(it, 1) %>% 
+    summarise(mean_stat = mean(value))
+  
+  ggplot(final_mean_stat_hpar, aes(x = mean_stat, y = runid, color = runid)) +
+    geom_boxplot() +
+    theme_bw() +
+    facet_grid(stat~.) +
+    theme(axis.text.y =  element_blank(),
+          legend.position = "bottom")  +
+    guides(color=guide_legend(ncol=2)) +
+    labs(x = "Mean of statistic over the last iteration")
+}
+
+```
+
+
+```{r speed, echo=FALSE, message=FALSE, warning=FALSE, fig.width = 10, fig.height = 10, fig.cap="Number of iterations to be withing 10% of the final statistic (bias or mae) of the confirmation rate. Boxplots show the distribution of values across geoids."}
+
+threshold <- 1.1
+speed_stats <- hpar_errors %>% 
+  inner_join(final_mean_stat_hpar %>% 
+               group_by(var, geoid, stat) %>% 
+               summarise(target_stat = min(abs(mean_stat)))) %>% 
+  group_by(var, geoid, stat, runid, sim) %>% 
+  filter(value < threshold * target_stat) %>% 
+  group_by(var, geoid, stat, runid, sim) %>%
+  summarise(it = mean(it))
+
+if (grp_by_incid) {
+  speed_stats %>% 
+    inner_join(incid_grps) %>% 
+    ggplot(aes(it, y = runid, color = runid)) +
+    geom_boxplot() +
+    facet_grid(incid_grp~stat) +
+    theme_bw() +
+    theme(axis.text.y =  element_blank(),
+          legend.position = "bottom")  +
+    guides(color=guide_legend(ncol=2)) +
+    labs(x = "Mean of number of iterations to be within 10% of the final value")
+} else {
+  speed_stats %>% 
+    ggplot(aes(it, y = runid, color = runid)) +
+    geom_boxplot() +
+    facet_wrap(~stat) +
+    theme_bw() +
+    theme(axis.text.y =  element_blank(),
+          legend.position = "bottom")  +
+    guides(color=guide_legend(ncol=2)) +
+    labs(x = "Mean of number of iterations to be within 10% of the final value")
+}
 
 ```
 
