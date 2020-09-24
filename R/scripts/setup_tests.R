@@ -15,24 +15,25 @@ library(inference)
 library(reticulate)
 
 option_list = list(
-  optparse::make_option(c("-T", "--test"),            action="store", default=1,                                                    type = 'integer',   help = "Test id to compile"),
-  optparse::make_option(c("-p", "--pipepath"),        action="store", default = Sys.getenv("COVID_PATH", "COVIDScenarioPipeline/"), type = 'character', help = "path to the COVIDScenarioPipeline directory"),
-  optparse::make_option(c("-y", "--python"),          action="store", default=Sys.getenv("COVID_PYTHON_PATH","python3"),            type = 'character', help = "path to python executable"),
-  optparse::make_option(c("-r", "--rpath"),           action="store", default=Sys.getenv("COVID_RSCRIPT_PATH","Rscript"),           type = 'character', help = "path to R executable"),
-  optparse::make_option(c("-n", "--n_slots"),         action="store", default=100,                                                  type = 'integer',   help = "Number of slots to run"),
-  optparse::make_option(c("-k", "--n_iter"),          action="store", default=300,                                                  type = 'integer',   help = "Number of iterations per slot"),
-  optparse::make_option(c("-j", "--n_cores"),         action="store", default=parallel::detectCores() - 2,                          type = 'integer',   help = "Number of cores to use"),
-  optparse::make_option(c("-s", "--suffix"),          action="store", default=NULL,                                                 type = 'character', help = "Number of cores to use"),
-  optparse::make_option(c("-t", "--stoch_traj_flag"), action="store", default=Sys.getenv("COVID_STOCHASTIC",TRUE),                  type = 'logical',   help = "Stochastic SEIR and outcomes trajectories if true")
+  optparse::make_option(c("-T", "--test"),            action="store", default = 1,                                                                                                                                            type = 'integer',   help = "Test id to compile"),
+  optparse::make_option(c("-p", "--pipepath"),        action="store", default = Sys.getenv("COVID_PATH", "COVIDScenarioPipeline/"),                                                                                           type = 'character', help = "path to the COVIDScenarioPipeline directory"),
+  optparse::make_option(c("-c", "--config_file"),     action="store", default = Sys.getenv("CONFIG_PATH", Sys.getenv("COVID_CONFIG_PATH", "COVIDScenarioPipeline/test/inference_testing_configs/config_test_inference.yml")), type = 'character', help="path to the COVIDScenarioPipeline directory"),
+  optparse::make_option(c("-y", "--python"),          action="store", default = Sys.getenv("COVID_PYTHON_PATH","python3"),                                                                                                    type = 'character', help = "path to python executable"),
+  optparse::make_option(c("-r", "--rpath"),           action="store", default = Sys.getenv("COVID_RSCRIPT_PATH","Rscript"),                                                                                                   type = 'character', help = "path to R executable"),
+  optparse::make_option(c("-n", "--n_slots"),         action="store", default = 100,                                                                                                                                          type = 'integer',   help = "Number of slots to run"),
+  optparse::make_option(c("-k", "--n_iter"),          action="store", default = 300,                                                                                                                                          type = 'integer',   help = "Number of iterations per slot"),
+  optparse::make_option(c("-j", "--n_cores"),         action="store", default = parallel::detectCores() - 2,                                                                                                                  type = 'integer',   help = "Number of cores to use"),
+  optparse::make_option(c("-s", "--suffix"),          action="store", default = NULL,                                                                                                                                         type = 'character', help = "Number of cores to use"),
+  optparse::make_option(c("-t", "--stoch_traj_flag"), action="store", default = Sys.getenv("COVID_STOCHASTIC",TRUE),                                                                                                          type = 'logical',   help = "Stochastic SEIR and outcomes trajectories if true")
 )
 
 parser <- optparse::OptionParser(option_list=option_list)
 opt <- optparse::parse_args(parser)
 
-source("COVIDScenarioPipeline/R/pkgs/inference/R/InferenceTest.R")
-  
+source(paste0(opt$pipepath,"/R/pkgs/inference/R/InferenceTest.R"))
+
 # File names
-config_file <- "configs/config_test_inference.yml"
+config_file <- opt$config_file
 setup <- "testInference"
 data_basepath <- "data/testInference"
 
@@ -143,7 +144,7 @@ buildTest <- function(param_vec, suffix = NULL) {
   # test$runid <- glue::glue("N{test$nnodes}_npis-sd{test$pert_sd_npis}-b{test$pert_bound_npis}_conf-sd{test$pert_sd_conf}-b{test$pert_bound_conf}-t{test$confirmation_transform}") %>% 
   #   str_replace_all("\\.", "")
   # 
-  test$runid <- glue::glue("N{test$nnodes}_npis-sd{test$pert_sd_npis}_conf-sd{test$pert_sd_conf}_lc-{test$lik_cases}_ld-none") %>% 
+  test$runid <- glue::glue("N{test$nnodes}_npis-sd{test$pert_sd_npis}_conf-sd{test$pert_sd_conf}_lc-{test$lik_cases}_ld-{test$lik_deaths}") %>% 
     str_replace_all("\\.", "")
   
   if(!is.null(suffix)) {
@@ -169,11 +170,13 @@ buildTest <- function(param_vec, suffix = NULL) {
 # Test specifications
 test_specs <- expand.grid(
   # Standard deviation of perturbation kernel
+  # pert_sd_npis = c(.01, .05, .1, .2),
   pert_sd_npis = c(.1),
   # Bounds on truncated normal of perturbation kernel
   pert_bound_npis = c(1),
   # Standard deviation of perturbation kernel
-  pert_sd_conf = c(.1),
+  # pert_sd_conf = c(.01, .05, .1, .2),
+  pert_sd_conf = .1,
   # Bounds on truncated normal of perturbation kernel
   pert_bound_conf = c(1),
   # Transformation on the confirmation rate
@@ -183,7 +186,7 @@ test_specs <- expand.grid(
   # lik_cases = c("sqrtnorm-0.01", "sqrtnorm-0.05", "pois", "sqrtnorm-0.1"),
   # lik_deaths = c("sqrtnorm-0.01", "sqrtnorm-0.05", "pois", "sqrtnorm-0.1")
   lik_cases = c("sqrtnorm-0.01"),
-  lik_deaths = c("")
+  lik_deaths = c("sqrtnorm-0.01")
 ) %>% 
   # set whether the run is the reference for fitting
   group_by(N) %>% 
@@ -216,7 +219,11 @@ for (i in unique(test_specs[["N"]])) {
 }
 
 # Write
-yaml::write_yaml(tests, "all_tests.yml")
+if (is.null(opt$suffix)) {
+  yaml::write_yaml(tests, "all_tests.yml")
+} else {
+  yaml::write_yaml(tests, glue::glue("all_tests_{opt$suffix}.yml"))
+}
 
 # Setup ------------------------------------------------------------------------
 
@@ -240,7 +247,7 @@ for (test in tests) {
   
   ## Spatial setup - - - -
   if(!dir.exists(data_basepath)) {
-    dir.create(data_basepath)
+    dir.create(data_basepath,recursive=TRUE)
   }
   
   config$spatial_setup <- list(
@@ -380,6 +387,11 @@ for (test in tests) {
   config$filtering$statistics$sum_cases$likelihood <- list(dist = "sqrtnorm",
                                                            param = .1)
   
+  # If present Remove likelihood on infections
+  if (any(str_detect(names(config$filtering$statistics), "infect"))) {
+    config$filtering$statistics$sum_infections <- NULL
+  }
+  
   if (test$fit_confirmation) {
     pert_params_conf <- list(
       distribution = "truncnorm",
@@ -409,9 +421,11 @@ for (test in tests) {
                                                              param = as.numeric(lik[2]))
   }
   
-  lik_deaths <- str_split(test$lik_deaths, "-")[[1]]
-  config$filtering$statistics$sum_deaths$likelihood <- list(dist = lik_deaths[1],
-                                                            param = as.numeric(lik_deaths[2]))
+  if(nchar(test$lik_deaths) > 0){
+    lik_deaths <- str_split(test$lik_deaths, "-")[[1]]
+    config$filtering$statistics$sum_deaths$likelihood <- list(dist = lik_deaths[1],
+                                                              param = as.numeric(lik_deaths[2]))
+  }
   config$outcomes$param_place_file <- hpar_inference_file
   yaml::write_yaml(config, file = config_file_out_inference)
   
@@ -508,7 +522,12 @@ if (do_plots) {
 }
 
 # Write run_tests.sh -----------------------------------------------------------
-run_file <- "run_tests.sh"
+# Write
+if (is.null(opt$suffix)) {
+  run_file <- "run_tests.sh"
+} else {
+  run_file <-  glue::glue("run_tests_{opt$suffix}.sh")
+}
 
 write("#!/bin/bash", file = run_file)
 
@@ -522,8 +541,15 @@ for (i in 1:length(tests)) {
 
 
 for (i in 1:length(tests)) {
+  
+  cmd <-  glue::glue("Rscript COVIDScenarioPipeline/R/scripts/postprocess_inference.R -t {i} -i TRUE -r TRUE -j {opt$n_cores}")
+  
+  if (!is.null(opt$suffix)) {
+    cmd <- str_c(cmd, glue::glue(" -a all_tests_{opt$suffix}.yml"))
+  } 
+  
   write(
-    glue::glue("Rscript COVIDScenarioPipeline/R/scripts/postprocess_inference.R -t {i} -i TRUE -r TRUE -j {opt$n_cores}"), 
+    cmd, 
     run_file,
     append = T
   )

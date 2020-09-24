@@ -7,6 +7,7 @@ params:
   redo: TRUE
   stat4plot: bias
   N4plot: N50
+  all_tests: all_tests_test.yml
 ---
 
 This notebook summarizes the results of tests of the inference setup. 
@@ -30,7 +31,7 @@ redo <- params$redo
 stat4plot <- params$stat4plot
 N4plot <- params$N4plot
 
-all_tests <- yaml::read_yaml("../../all_tests.yml")
+all_tests <- yaml::read_yaml(str_c("../../", params$all_tests))
 ref_tests <- which(map_lgl(all_tests, ~ .$runid == .$ref_data_runid))
 out_dir <- "../../notebooks/outputs"
 path_to_data <- "../data/"
@@ -48,8 +49,6 @@ getSpecs <- function(df) {
 ```
 
 
-
-
 ```{r synthetic data multi, echo=FALSE, fig.cap="Figure 1. Synthetic data", fig.width=10, fig.height=5}
 
 to_fit <- map_df(configs, function(x) read_csv(str_c("../", str_replace(x$filtering$data_path, "data", path_to_data))) %>%  rename(geoid = FIPS) %>% 
@@ -63,7 +62,7 @@ grp_by_incid <- length(unique(to_fit$geoid)) > 5
 if (grp_by_incid) {
   # Make geoid groups by number of cases
   incid_grps <- to_fit %>%
-    filter(var == "incidI") %>% 
+    filter(var == "incidC") %>% 
     group_by(geoid) %>% 
     summarise(Ntot = sum(N)) %>% 
     mutate(incid_grp = cut(Ntot, 3,  labels = c("low", "med", "high"))) %>% 
@@ -109,16 +108,20 @@ if (redo | !file.exists(sim_stats_file)) {
 }
 
 # Variables to keep for plots
-var_to_plot <- c("incidD", "incidC", "incidI")
+var_to_plot <- c("incidD", "incidC")
 # Number of test runids
 n_runid <- length(unique(sim_stats$runid))
+# Whether to group results by runid
+by_runid <- n_runid > 3
+by_runid = T
 
 if (grp_by_incid) {
   sim_stats <- inner_join(sim_stats, incid_grps)
 }
 
+
 p_sim <- sim_stats %>%
-  filter(geoid != "all", var %in% var_to_plot, nnodes == N4plot) %>%
+  filter(var %in% var_to_plot, nnodes == N4plot) %>%
   ggplot(aes(x = time)) +
   geom_ribbon(aes(ymin = q025, ymax = q975, fill = geoid), alpha = .2) +
   # geom_ribbon(aes(ymin = q25, ymax = q75, fill = geoid), alpha = .2) +
@@ -148,45 +151,157 @@ if (redo | !file.exists(sim_errors_file)) {
                            mutate(runid = x$runid)}) %>% 
     mutate(geoid = as.factor(geoid)) 
   
-  sim_errors <- gather(sim_errors, stat, value, -var, -geoid, -n, -it, -sim, -runid)
-  
   arrow::write_parquet(sim_errors, sim_errors_file)
 } else {
   sim_errors <- arrow::read_parquet(sim_errors_file)
 }
 
+sim_errors <- gather(sim_errors, stat, value, -var, -geoid, -n, -it, -sim, -runid) %>% 
+  filter(var %in% var_to_plot)
+
 # Compute the median error
 sim_error_median <- sim_errors %>% 
   group_by(it, var, runid, stat, geoid) %>% 
   summarise(median = median(value))
+
 # Get specifications of runids
 sim_error_median <- getSpecs(sim_error_median)
+
 if (grp_by_incid) {
   sim_error_median <- inner_join(sim_error_median, incid_grps)
 }
 
 intercepts <- tibble(y  = 0, stat = params$stat4plot, var = unique(sim_error_median$var))
 
-p_sim_err <- sim_error_median %>%  
-  filter(stat == stat4plot) %>% 
-  ggplot(aes(x = it, y = median, color = geoid)) +
-  geom_line() +
-  geom_hline(data = intercepts, aes(yintercept = y), color = "black", lty = 2) +
-  theme_bw() +
-  guides(color=guide_legend(ncol=2)) +
-  labs(x = "iteration", y = glue::glue("median {stat4plot} across slots")) +
-  guides(color = "none")
+if (by_runid) {
+  sim_error_median <- sim_error_median %>% 
+    {
+      if (grp_by_incid) {
+        group_by(., it, var, runid, stat, npi_specs, conf_specs, incid_grp)
+      } else {
+        group_by(., it, var, runid, stat, npi_specs, conf_specs)
+      }
+    } %>% 
+    summarise(median = mean(median),
+              max = max(median),
+              min = min(median))
+  
+  p_sim_err <- sim_error_median %>%  
+    filter(stat == stat4plot) %>% 
+    ggplot(aes(x = it, y = median, color = runid)) +
+    geom_line() +
+    geom_hline(data = intercepts, aes(yintercept = y), color = "black", lty = 2) +
+    theme_bw() +
+    guides(color=guide_legend(ncol=2)) +
+    labs(x = "iteration", y = glue::glue("median {stat4plot} across slots")) +
+    theme(legend.position = "bottom")
+  
+  if (grp_by_incid) {
+    p_sim_err + facet_grid(npi_specs + conf_specs  + var ~  incid_grp, scales = "free", drop = T)
+  } else {
+    p_sim_err + facet_wrap(npi_specs + conf_specs ~ var , scales = "free")
+  }
+  
+} else {
+  
+  p_sim_err <- sim_error_median %>%  
+    filter(stat == stat4plot) %>% 
+    ggplot(aes(x = it, y = median, color = geoid)) +
+    geom_line() +
+    geom_hline(data = intercepts, aes(yintercept = y), color = "black", lty = 2) +
+    theme_bw() +
+    guides(color=guide_legend(ncol=2)) +
+    labs(x = "iteration", y = glue::glue("median {stat4plot} across slots")) +
+    guides(color = "none")
+  
+  if (grp_by_incid) {
+    p_sim_err + facet_wrap(var + runid ~ incid_grp, scales = "free", ncol = ifelse(n_runid > 1, 6, 3), drop = T)
+  } else {
+    p_sim_err + facet_wrap(var ~ runid, scales = "free", ncol = ifelse(n_runid > 1, 3, 1))
+  }
+}
+
+
+
+
+```
+
+
+```{r finalerrorsim, echo=FALSE, message=FALSE, warning=FALSE, fig.width = 10, fig.height = 8, fig.cap="Final statistic (bias or mae) of the simualated trajectories rate. Boxplots show the distribution of values across geoids."}
 
 if (grp_by_incid) {
-  p_sim_err + facet_wrap(var + runid ~ incid_grp, scales = "free", ncol = ifelse(n_runid > 1, 6, 3), drop = T)
+  # Compute final errors
+  final_mean_stat_sims <- sim_errors %>% 
+    inner_join(incid_grps) %>% 
+    group_by(var, geoid, stat, runid, incid_grp) %>% 
+    slice_max(it) %>% 
+    summarise(mean_stat = mean(value))
+  
+  ggplot(final_mean_stat_sims, aes(x = mean_stat, y = runid, color = runid)) +
+    geom_boxplot(outlier.size=.8) +
+    theme_bw() +
+    facet_grid(stat~incid_grp) +
+    theme(axis.text.y =  element_blank(),
+          legend.position = "bottom")  +
+    guides(color=guide_legend(ncol=2)) +
+    labs(x = "Mean of statistic over the last iteration")
+  
 } else {
-  p_sim_err + facet_wrap(var ~ runid, scales = "free", ncol = ifelse(n_runid > 1, 3, 1))
+  # Compute final errors
+  final_mean_stat_sims <- sim_errors %>% 
+    group_by(var, geoid, stat, runid) %>% 
+    slice_max(it) %>% 
+    summarise(mean_stat = mean(value))
+  
+  ggplot(final_mean_stat_sims, aes(x = mean_stat, y = runid, color = runid)) +
+    geom_boxplot(outlier.size=.8) +
+    theme_bw() +
+    facet_grid(stat~.) +
+    theme(axis.text.y =  element_blank(),
+          legend.position = "bottom")  +
+    guides(color=guide_legend(ncol=2)) +
+    labs(x = "Mean of statistic over the last iteration")
 }
 
 ```
 
 
+```{r speedsim, echo=FALSE, message=FALSE, warning=FALSE, fig.width = 10, fig.height = 8, fig.cap="Mean number of iterations to readh the  final statistic (bias or mae) of the simualated trajectories rate. Boxplots show the distribution of values across geoids."}
 
+threshold <- 1.1
+speed_stats_sims <- sim_errors %>% 
+  inner_join(final_mean_stat_sims %>% 
+               group_by(var, geoid, stat) %>% 
+               summarise(target_stat = min(abs(mean_stat)))) %>% 
+  group_by(var, geoid, stat, runid, sim) %>% 
+  filter(value < threshold * target_stat) %>% 
+  group_by(var, geoid, stat, runid, sim) %>%
+  summarise(it = mean(it))
+
+if (grp_by_incid) {
+  speed_stats_sims %>% 
+    inner_join(incid_grps) %>% 
+    ggplot(aes(it, y = runid, color = runid)) +
+    geom_boxplot(outlier.size=.8) +
+    facet_grid(incid_grp~stat+var) +
+    theme_bw() +
+    theme(axis.text.y =  element_blank(),
+          legend.position = "bottom")  +
+    guides(color=guide_legend(ncol=2)) +
+    labs(x = "Mean of number of iterations to be within 10% of the final value")
+} else {
+  speed_stats_sims %>% 
+    ggplot(aes(it, y = runid, color = runid)) +
+    geom_boxplot(outlier.size=.8) +
+    facet_wrap(~stat) +
+    theme_bw() +
+    theme(axis.text.y =  element_blank(),
+          legend.position = "bottom")  +
+    guides(color=guide_legend(ncol=2)) +
+    labs(x = "Mean of number of iterations to be within 10% of the final value")
+}
+
+```
 
 ```{r npi fit, echo=FALSE, fig.cap="Figure 4. NPI reductions. Black dotted lines correspond to the density of the initial random draw of the parameters as specified in the config, colored lines the posterior densities, and vertical dashed lines the values used to generate the data.", fig.height=6, fig.width=10, message=FALSE, warning=FALSE}
 
@@ -263,19 +378,24 @@ if (grp_by_incid) {
   npi_priors <- npi_priors %>% inner_join(incid_grps)
 }
 
-p_npis <- npis %>% 
-  filter(nnodes == N4plot) %>% 
-  ggplot(aes(x = reduction, color = geoid)) +
-  geom_density() +
-  geom_density(data = npi_priors, color = "black", lty = 3, size = .5) +
-  geom_vline(data = npis_generation, aes(xintercept = reduction, color = geoid), lty = 2, size = .5) +
-  guides(color = "none") +
-  theme_bw()
 
-if (grp_by_incid) {
-  p_npis + facet_wrap(npi + runid ~ incid_grp, scales = "free_y", ncol = ifelse(n_runid > 1, 6, 3), drop = T)
+if (by_runid) {
+  # Don't plot anything
 } else {
-  p_npis + facet_wrap(npi ~ runid, scales = "free", ncol = ifelse(n_runid > 1, 3, 1))
+  p_npis <- npis %>% 
+    filter(nnodes == N4plot) %>% 
+    ggplot(aes(x = reduction, color = geoid)) +
+    geom_density() +
+    geom_density(data = npi_priors, color = "black", lty = 3, size = .5) +
+    geom_vline(data = npis_generation, aes(xintercept = reduction, color = geoid), lty = 2, size = .5) +
+    guides(color = "none") +
+    theme_bw()
+  
+  if (grp_by_incid) {
+    p_npis + facet_wrap(npi + runid ~ incid_grp, scales = "free_y", ncol = ifelse(n_runid > 1, 6, 3), drop = T)
+  } else {
+    p_npis + facet_wrap(npi ~ runid, scales = "free", ncol = ifelse(n_runid > 1, 3, 1))
+  }
 }
 
 ```
@@ -386,23 +506,45 @@ hpar_generation <- read_csv(glue::glue("../{path_to_data}/generated/generate_tes
 if (grp_by_incid) {
   hpar <- hpar %>% inner_join(incid_grps)
   hpar_generation <- hpar_generation %>% inner_join(incid_grps)
+  hpar <- getSpecs(hpar)
 }
 
-# Not that this assumes the only outcomes parameter inferred upon is the confirmation rate
-p_hpar <- hpar %>% 
-  filter((outcome %in% hpar_priors$outcome) & (source %in% hpar$source), nnodes == N4plot) %>% 
-  ggplot(aes(x = value)) +
-  geom_density(data = hpar_priors, color = "black", lty = 3, size = .4) +
-  geom_vline(data = hpar_generation  %>%
-               filter((outcome %in% hpar_priors$outcome) & (source %in% hpar$source)),
-             aes(xintercept = value), lty = 2, size = .5) +
-  geom_density(aes(color = geoid)) +
-  guides(color = "none") +
-  coord_cartesian(xlim = c(0,1)) +
-  theme_bw()
+if (by_runid) { 
+  # Not that this assumes the only outcomes parameter inferred upon is the confirmation rate
+  p_hpar <- hpar %>% 
+    filter((outcome %in% hpar_priors$outcome) & (source %in% hpar$source), nnodes == N4plot) %>% 
+    ggplot(aes(x = value)) +
+    geom_density(data = hpar_priors, color = "black", lty = 3, size = .4) +
+    geom_vline(data = hpar_generation  %>%
+                 filter((outcome %in% hpar_priors$outcome) & (source %in% hpar$source)),
+               aes(xintercept = value), lty = 2, size = .5) +
+    geom_density(aes(color = geoid)) +
+    guides(color = "none") +
+    coord_cartesian(xlim = c(0,1)) +
+    theme_bw()
+  
+} else {
+  # Not that this assumes the only outcomes parameter inferred upon is the confirmation rate
+  p_hpar <- hpar %>% 
+    filter((outcome %in% hpar_priors$outcome) & (source %in% hpar$source), nnodes == N4plot) %>% 
+    ggplot(aes(x = value)) +
+    geom_density(data = hpar_priors, color = "black", lty = 3, size = .4) +
+    geom_vline(data = hpar_generation  %>%
+                 filter((outcome %in% hpar_priors$outcome) & (source %in% hpar$source)),
+               aes(xintercept = value), lty = 2, size = .5) +
+    geom_density(aes(color = geoid, lty = runid)) +
+    guides(color = "none") +
+    coord_cartesian(xlim = c(0,1)) +
+    theme_bw() +
+    theme(legend.position = "bottom")
+}
 
 if (grp_by_incid) {
-  p_hpar + facet_wrap( runid ~ incid_grp, scales = "free_y", ncol = 3, drop = T)
+  if (by_runid) {
+    p_hpar + facet_grid( npi_specs + conf_specs ~ incid_grp, scales = "free_y", drop = T)
+  } else {
+    p_hpar + facet_wrap( runid ~ incid_grp, scales = "free_y", ncol = 3, drop = T)
+  }
 } else {
   p_hpar + facet_wrap( ~ runid, scales = "free", labeller = label_both)
 }
@@ -423,12 +565,12 @@ if (redo | !file.exists(hpar_errors_file)) {
                             mutate(runid = x$runid)}) %>% 
     select(-n)
   
-  hpar_errors <- gather(hpar_errors, stat, value, -var, -it, -sim, -runid, -geoid)
-  
   arrow::write_parquet(hpar_errors, hpar_errors_file)
 } else {
   hpar_errors <- arrow::read_parquet(hpar_errors_file)
 }
+
+hpar_errors <- gather(hpar_errors, stat, value, -var, -it, -sim, -runid, -geoid)
 
 hpar_errors_median <- hpar_errors %>% 
   group_by(it, var, runid, stat, geoid) %>% 
@@ -440,21 +582,130 @@ if (grp_by_incid) {
   hpar_errors_median <- hpar_errors_median %>% inner_join(incid_grps)
 }
 
-intercepts_hpar <- tibble(y  = 0, stat = params$stat4plot, geoid = unique(hpar_errors_median$geoid)) 
+intercepts_hpar <- tibble(y  = 0, stat = params$stat4plot) 
 
-p_hpar_err <- hpar_errors_median %>%  
-  filter(nnodes == N4plot, stat == stat4plot) %>% 
-  ggplot(aes(x = it, y = median, color = geoid)) +
-  geom_line() +
-  geom_hline(data = intercepts_hpar, aes(yintercept = y), color = "black", lty = 2) +
-  theme_bw() +
-  labs(x = "iteration", y = glue::glue("{stat4plot} across slots")) +
-  guides(color="none") 
+if (by_runid) {
+  hpar_errors_median2 <- hpar_errors_median %>% 
+    {
+      if (grp_by_incid) {
+        group_by(., it, var, runid, stat, npi_specs, conf_specs, incid_grp)
+      } else {
+        group_by(., it, var, runid, stat, npi_specs, conf_specs)
+      }
+    } %>% 
+    summarise(median = mean(median),
+              max = max(median),
+              min = min(median))
+  
+  p_hpar_err <- hpar_errors_median2 %>%  
+    filter(stat == stat4plot) %>% 
+    ggplot(aes(x = it, y = median, color = runid)) +
+    geom_ribbon(aes(ymin = min, ymax = max)) + 
+    geom_line() +
+    geom_hline(data = intercepts_hpar, aes(yintercept = y), color = "black", lty = 2) +
+    theme_bw() +
+    guides(color=guide_legend(ncol=2)) +
+    labs(x = "iteration", y = glue::glue("Mean across geoids of the median {stat4plot} across slots for each goid")) +
+    theme(legend.position = "bottom")
+  
+  if (grp_by_incid) {
+    p_hpar_err + facet_grid(npi_specs + conf_specs ~ incid_grp, scales = "free", drop = T)
+  } else {
+    p_hpar_err + facet_wrap(npi_specs + conf_specs ~ . , scales = "free")
+  }
+  
+} else {
+  
+  p_hpar_err <- hpar_errors_median %>%  
+    filter(nnodes == N4plot, stat == stat4plot) %>% 
+    ggplot(aes(x = it, y = median, color = geoid)) +
+    geom_line() +
+    geom_hline(data = intercepts_hpar, aes(yintercept = y), color = "black", lty = 2) +
+    theme_bw() +
+    labs(x = "iteration", y = glue::glue("{stat4plot} across slots")) +
+    guides(color="none") 
+  
+  if (grp_by_incid) {
+    p_hpar_err + facet_grid(runid ~ incid_grp, scales = "free", drop = T)
+  } else {
+    p_hpar_err + facet_wrap( ~ runid, scales = "free", ncol = ifelse(n_runid > 1, 3, 1))
+  }
+}
+
+
+```
+```{r speedhpar, echo=FALSE, message=FALSE, warning=FALSE, fig.width = 10, fig.height = 7, fig.cap="Final statistic (bias or mae) of the confirmation rate. Boxplots show the distribution of values across geoids."}
 
 if (grp_by_incid) {
-  p_hpar_err + facet_grid(runid ~ incid_grp, scales = "free", drop = T)
+  # Compute final errors
+  final_mean_stat_hpar <- hpar_errors %>% 
+    inner_join(incid_grps) %>% 
+    group_by(var, geoid, stat, runid, incid_grp) %>% 
+    slice_max(it) %>% 
+    summarise(mean_stat = mean(value))
+  
+  ggplot(final_mean_stat_hpar, aes(x = mean_stat, y = runid, color = runid)) +
+    geom_boxplot(outlier.size=.8) +
+    theme_bw() +
+    facet_grid(stat~incid_grp) +
+    theme(axis.text.y =  element_blank(),
+          legend.position = "bottom")  +
+    guides(color=guide_legend(ncol=2)) +
+    labs(x = "Mean of statistic over the last iteration")
+  
 } else {
-  p_hpar_err + facet_wrap( ~ runid, scales = "free", ncol = ifelse(n_runid > 1, 3, 1))
+  # Compute final errors
+  final_mean_stat_hpar <- hpar_errors %>% 
+    group_by(var, geoid, stat, runid) %>% 
+    slice_max(it) %>% 
+    summarise(mean_stat = mean(value))
+  
+  ggplot(final_mean_stat_hpar, aes(x = mean_stat, y = runid, color = runid)) +
+    geom_boxplot(outlier.size=.8) +
+    theme_bw() +
+    facet_grid(stat~.) +
+    theme(axis.text.y =  element_blank(),
+          legend.position = "bottom")  +
+    guides(color=guide_legend(ncol=2)) +
+    labs(x = "Mean of statistic over the last iteration")
+}
+
+```
+
+
+```{r speed, echo=FALSE, message=FALSE, warning=FALSE, fig.width = 10, fig.height = 7, fig.cap="Number of iterations to be withing 10% of the final statistic (bias or mae) of the confirmation rate. Boxplots show the distribution of values across geoids."}
+
+threshold <- 1.1
+speed_stats <- hpar_errors %>% 
+  inner_join(final_mean_stat_hpar %>% 
+               group_by(var, geoid, stat) %>% 
+               summarise(target_stat = min(abs(mean_stat)))) %>% 
+  group_by(var, geoid, stat, runid, sim) %>% 
+  filter(value < threshold * target_stat) %>% 
+  group_by(var, geoid, stat, runid, sim) %>%
+  summarise(it = mean(it))
+
+if (grp_by_incid) {
+  speed_stats %>% 
+    inner_join(incid_grps) %>% 
+    ggplot(aes(it, y = runid, color = runid)) +
+    geom_boxplot(outlier.size=.8) +
+    facet_grid(incid_grp~stat) +
+    theme_bw() +
+    theme(axis.text.y =  element_blank(),
+          legend.position = "bottom")  +
+    guides(color=guide_legend(ncol=2)) +
+    labs(x = "Mean of number of iterations to be within 10% of the final value")
+} else {
+  speed_stats %>% 
+    ggplot(aes(it, y = runid, color = runid)) +
+    geom_boxplot(outlier.size=.8) +
+    facet_wrap(~stat) +
+    theme_bw() +
+    theme(axis.text.y =  element_blank(),
+          legend.position = "bottom")  +
+    guides(color=guide_legend(ncol=2)) +
+    labs(x = "Mean of number of iterations to be within 10% of the final value")
 }
 
 ```
