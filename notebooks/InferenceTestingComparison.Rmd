@@ -49,8 +49,6 @@ getSpecs <- function(df) {
 ```
 
 
-
-
 ```{r synthetic data multi, echo=FALSE, fig.cap="Figure 1. Synthetic data", fig.width=10, fig.height=5}
 
 to_fit <- map_df(configs, function(x) read_csv(str_c("../", str_replace(x$filtering$data_path, "data", path_to_data))) %>%  rename(geoid = FIPS) %>% 
@@ -64,7 +62,7 @@ grp_by_incid <- length(unique(to_fit$geoid)) > 5
 if (grp_by_incid) {
   # Make geoid groups by number of cases
   incid_grps <- to_fit %>%
-    filter(var == "incidI") %>% 
+    filter(var == "incidC") %>% 
     group_by(geoid) %>% 
     summarise(Ntot = sum(N)) %>% 
     mutate(incid_grp = cut(Ntot, 3,  labels = c("low", "med", "high"))) %>% 
@@ -149,12 +147,12 @@ if (redo | !file.exists(sim_errors_file)) {
                            mutate(runid = x$runid)}) %>% 
     mutate(geoid = as.factor(geoid)) 
   
-  sim_errors <- gather(sim_errors, stat, value, -var, -geoid, -n, -it, -sim, -runid)
-  
   arrow::write_parquet(sim_errors, sim_errors_file)
 } else {
   sim_errors <- arrow::read_parquet(sim_errors_file)
 }
+
+sim_errors <- gather(sim_errors, stat, value, -var, -geoid, -n, -it, -sim, -runid)
 
 # Compute the median error
 sim_error_median <- sim_errors %>% 
@@ -424,12 +422,12 @@ if (redo | !file.exists(hpar_errors_file)) {
                             mutate(runid = x$runid)}) %>% 
     select(-n)
   
-  hpar_errors <- gather(hpar_errors, stat, value, -var, -it, -sim, -runid, -geoid)
-  
   arrow::write_parquet(hpar_errors, hpar_errors_file)
 } else {
   hpar_errors <- arrow::read_parquet(hpar_errors_file)
 }
+
+hpar_errors <- gather(hpar_errors, stat, value, -var, -it, -sim, -runid, -geoid)
 
 hpar_errors_median <- hpar_errors %>% 
   group_by(it, var, runid, stat, geoid) %>% 
