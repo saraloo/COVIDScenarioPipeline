@@ -75,8 +75,6 @@ interventions:
 
 outcomes:
   method: delayframe
-  param_from_file: TRUE
-  param_place_file: data/hospitalization_testInference.hpar.parquet
   scenarios: med
   settings:
     med:
