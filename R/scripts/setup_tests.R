@@ -16,6 +16,7 @@ library(reticulate)
 option_list = list(
   optparse::make_option(c("-t", "--test"), action="store", default=1, type='integer', help="Test id to compile"),
   optparse::make_option(c("-p", "--pipepath"), action="store", type='character', help="path to the COVIDScenarioPipeline directory", default = Sys.getenv("COVID_PATH", "COVIDScenarioPipeline/")),
+  optparse::make_option(c("-c", "--config_file"), action="store", type='character', help="path to the COVIDScenarioPipeline directory", default = Sys.getenv("CONFIG_PATH", Sys.getenv("COVID_CONFIG_PATH", "COVIDScenarioPipeline/test/inference_testing_configs/config_test_inference.yml"))),
   optparse::make_option(c("-y", "--python"), action="store", default=Sys.getenv("COVID_PYTHON_PATH","python3"), type='character', help="path to python executable"),
   optparse::make_option(c("-r", "--rpath"), action="store", default=Sys.getenv("COVID_RSCRIPT_PATH","Rscript"), type = 'character', help = "path to R executable"),
   optparse::make_option(c("-n", "--n_slots"), action="store", default=100, type = 'integer', help = "Number of slots to run"),
@@ -27,10 +28,10 @@ option_list = list(
 parser <- optparse::OptionParser(option_list=option_list)
 opt <- optparse::parse_args(parser)
 
-source("COVIDScenarioPipeline/R/pkgs/inference/R/InferenceTest.R")
+source(paste0(opt$pipepath,"/R/pkgs/inference/R/InferenceTest.R"))
 
 # File names
-config_file <- "configs/config_test_inference.yml"
+config_file <- opt$config_file
 setup <- "testInference"
 data_basepath <- "data/testInference"
 
