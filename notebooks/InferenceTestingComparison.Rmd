@@ -227,18 +227,18 @@ if (by_runid) {
 ```
 
 
-```{r finalerrorsim, echo=FALSE, message=FALSE, warning=FALSE, fig.cap="Final statistic (bias or mae) of the simualated trajectories rate. Boxplots show the distribution of values across geoids."}
+```{r finalerrorsim, echo=FALSE, message=FALSE, warning=FALSE, fig.width = 10, fig.height = 8, fig.cap="Final statistic (bias or mae) of the simualated trajectories rate. Boxplots show the distribution of values across geoids."}
 
 if (grp_by_incid) {
   # Compute final errors
   final_mean_stat_sims <- sim_errors %>% 
     inner_join(incid_grps) %>% 
     group_by(var, geoid, stat, runid, incid_grp) %>% 
-    slice_max(it, 1) %>% 
+    slice_max(it) %>% 
     summarise(mean_stat = mean(value))
   
   ggplot(final_mean_stat_sims, aes(x = mean_stat, y = runid, color = runid)) +
-    geom_boxplot() +
+    geom_boxplot(outlier.size=.8) +
     theme_bw() +
     facet_grid(stat~incid_grp) +
     theme(axis.text.y =  element_blank(),
@@ -250,11 +250,11 @@ if (grp_by_incid) {
   # Compute final errors
   final_mean_stat_sims <- sim_errors %>% 
     group_by(var, geoid, stat, runid) %>% 
-    slice_max(it, 1) %>% 
+    slice_max(it) %>% 
     summarise(mean_stat = mean(value))
   
   ggplot(final_mean_stat_sims, aes(x = mean_stat, y = runid, color = runid)) +
-    geom_boxplot() +
+    geom_boxplot(outlier.size=.8) +
     theme_bw() +
     facet_grid(stat~.) +
     theme(axis.text.y =  element_blank(),
@@ -266,7 +266,7 @@ if (grp_by_incid) {
 ```
 
 
-```{r speedsim, echo=FALSE, message=FALSE, warning=FALSE, fig.cap="Mean number of iterations to readh the  final statistic (bias or mae) of the simualated trajectories rate. Boxplots show the distribution of values across geoids."}
+```{r speedsim, echo=FALSE, message=FALSE, warning=FALSE, fig.width = 10, fig.height = 8, fig.cap="Mean number of iterations to readh the  final statistic (bias or mae) of the simualated trajectories rate. Boxplots show the distribution of values across geoids."}
 
 threshold <- 1.1
 speed_stats_sims <- sim_errors %>% 
@@ -282,7 +282,7 @@ if (grp_by_incid) {
   speed_stats_sims %>% 
     inner_join(incid_grps) %>% 
     ggplot(aes(it, y = runid, color = runid)) +
-    geom_boxplot() +
+    geom_boxplot(outlier.size=.8) +
     facet_grid(incid_grp~stat+var) +
     theme_bw() +
     theme(axis.text.y =  element_blank(),
@@ -292,7 +292,7 @@ if (grp_by_incid) {
 } else {
   speed_stats_sims %>% 
     ggplot(aes(it, y = runid, color = runid)) +
-    geom_boxplot() +
+    geom_boxplot(outlier.size=.8) +
     facet_wrap(~stat) +
     theme_bw() +
     theme(axis.text.y =  element_blank(),
@@ -634,18 +634,18 @@ if (by_runid) {
 
 
 ```
-```{r speedhpar, echo=FALSE, message=FALSE, warning=FALSE, fig.width = 10, fig.height = 10, fig.cap="Final statistic (bias or mae) of the confirmation rate. Boxplots show the distribution of values across geoids."}
+```{r speedhpar, echo=FALSE, message=FALSE, warning=FALSE, fig.width = 10, fig.height = 7, fig.cap="Final statistic (bias or mae) of the confirmation rate. Boxplots show the distribution of values across geoids."}
 
 if (grp_by_incid) {
   # Compute final errors
   final_mean_stat_hpar <- hpar_errors %>% 
     inner_join(incid_grps) %>% 
     group_by(var, geoid, stat, runid, incid_grp) %>% 
-    slice_max(it, 1) %>% 
+    slice_max(it) %>% 
     summarise(mean_stat = mean(value))
   
   ggplot(final_mean_stat_hpar, aes(x = mean_stat, y = runid, color = runid)) +
-    geom_boxplot() +
+    geom_boxplot(outlier.size=.8) +
     theme_bw() +
     facet_grid(stat~incid_grp) +
     theme(axis.text.y =  element_blank(),
@@ -657,11 +657,11 @@ if (grp_by_incid) {
   # Compute final errors
   final_mean_stat_hpar <- hpar_errors %>% 
     group_by(var, geoid, stat, runid) %>% 
-    slice_max(it, 1) %>% 
+    slice_max(it) %>% 
     summarise(mean_stat = mean(value))
   
   ggplot(final_mean_stat_hpar, aes(x = mean_stat, y = runid, color = runid)) +
-    geom_boxplot() +
+    geom_boxplot(outlier.size=.8) +
     theme_bw() +
     facet_grid(stat~.) +
     theme(axis.text.y =  element_blank(),
@@ -673,7 +673,7 @@ if (grp_by_incid) {
 ```
 
 
-```{r speed, echo=FALSE, message=FALSE, warning=FALSE, fig.width = 10, fig.height = 10, fig.cap="Number of iterations to be withing 10% of the final statistic (bias or mae) of the confirmation rate. Boxplots show the distribution of values across geoids."}
+```{r speed, echo=FALSE, message=FALSE, warning=FALSE, fig.width = 10, fig.height = 7, fig.cap="Number of iterations to be withing 10% of the final statistic (bias or mae) of the confirmation rate. Boxplots show the distribution of values across geoids."}
 
 threshold <- 1.1
 speed_stats <- hpar_errors %>% 
@@ -689,7 +689,7 @@ if (grp_by_incid) {
   speed_stats %>% 
     inner_join(incid_grps) %>% 
     ggplot(aes(it, y = runid, color = runid)) +
-    geom_boxplot() +
+    geom_boxplot(outlier.size=.8) +
     facet_grid(incid_grp~stat) +
     theme_bw() +
     theme(axis.text.y =  element_blank(),
@@ -699,7 +699,7 @@ if (grp_by_incid) {
 } else {
   speed_stats %>% 
     ggplot(aes(it, y = runid, color = runid)) +
-    geom_boxplot() +
+    geom_boxplot(outlier.size=.8) +
     facet_wrap(~stat) +
     theme_bw() +
     theme(axis.text.y =  element_blank(),
