@@ -227,7 +227,7 @@ if (!dir.exists("configs"))
   dir.create("configs")
 
 if (!dir.exists("data/generated")) 
-  dir.create("data/generated",recursive=TRUE)
+  dir.create("data/generated")
 
 # Select first test, a loop could be made here if multiple tests are to be run
 for (test in tests) {
@@ -243,7 +243,7 @@ for (test in tests) {
   
   ## Spatial setup - - - -
   if(!dir.exists(data_basepath)) {
-    dir.create(data_basepath,recursive=TRUE)
+    dir.create(data_basepath)
   }
   
   config$spatial_setup <- list(
