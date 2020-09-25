@@ -177,7 +177,7 @@ test_specs <- expand.grid(
   pert_bound_npis = c(1),
   # Standard deviation of perturbation kernel
   # pert_sd_conf = c(.01, .05, .1, .2),
-  pert_sd_conf = c(.01, .05, .01),
+  pert_sd_conf = c(.01, .05, .1),
   # Bounds on truncated normal of perturbation kernel
   pert_bound_conf = c(1),
   # Transformation on the confirmation rate
@@ -199,11 +199,11 @@ test_specs <- expand.grid(
   ungroup()
 
 # Keep only reasonable combiations for confirmation rate perturbations
-test_specs <- test_specs %>% 
-  filter(
-    (conf_transform == "none" & pert_sd_conf %in% c(.01, .1)  & pert_bound_conf %in% c(.1, 1)) |
-      (conf_transform == "logit" & pert_sd_conf %in% c(.1, .5)  & pert_bound_conf %in% c(1, 5))
-  )
+# test_specs <- test_specs %>% 
+#   filter(
+#     (conf_transform == "none" & pert_sd_conf %in% c(.01, .1)  & pert_bound_conf %in% c(.1, 1)) |
+#       (conf_transform == "logit" & pert_sd_conf %in% c(.1, .5)  & pert_bound_conf %in% c(1, 5))
+#   )
 
 
 # Build tests specifications
