@@ -1,7 +1,7 @@
 # Setup to test inference on synthetic data
 # Preamble ---------------------------------------------------------------------
-options(warn=1)
-options(error=quit,status=2)
+# options(warn=1)
+# options(error=quit,status=2)
 
 library(tidyverse)
 library(xts)
@@ -125,7 +125,7 @@ setMobility <- function(test) {
 buildTest <- function(param_vec, suffix = NULL) {
   test <- list(
     nnodes = as.integer(param_vec[["N"]]),
-    pop = rep(param_vec[["pop"]], param_vec[["N"]]),
+    pop = rep(as.numeric(param_vec[["pop"]]), param_vec[["N"]]),
     mobility = param_vec[["mob"]],
     fit_confirmation = T,
     confirmation_transform = param_vec[["conf_transform"]],
