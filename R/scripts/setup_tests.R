@@ -143,7 +143,8 @@ buildTest <- function(param_vec, suffix = NULL) {
   # 
   # test$runid <- glue::glue("N{test$nnodes}_npis-sd{test$pert_sd_npis}_conf-sd{test$pert_sd_conf}_lc-{test$lik_cases}_ld-{test$lik_deaths}") %>% 
   #   str_replace_all("\\.", "")
-  test$runid <- glue::glue("N{test$nnodes}_npis-sd{test$pert_sd_npis}_conf-sd{test$pert_sd_conf}_lc-{test$lik_cases}_ld-{test$lik_deaths}_pop{log10(test$pop[1])}") %>% 
+  popval <- log10(as.numeric(param_vec[["pop"]]))
+  test$runid <- glue::glue("N{test$nnodes}_npis-sd{test$pert_sd_npis}_conf-sd{test$pert_sd_conf}_lc-{test$lik_cases}_ld-{test$lik_deaths}_pop{popval}") %>% 
     str_replace_all("\\.", "")
   
   if(!is.null(suffix)) {
