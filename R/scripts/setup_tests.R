@@ -21,7 +21,7 @@ option_list = list(
   optparse::make_option(c("-n", "--n_slots"), action="store", default=100, type = 'integer', help = "Number of slots to run"),
   optparse::make_option(c("-k", "--n_iter"), action="store", default=300, type = 'integer', help = "Number of iterations per slot"),
   optparse::make_option(c("-j", "--n_cores"), action="store", default=parallel::detectCores() - 2, type = 'integer', help = "Number of cores to use"),
-  optparse::make_option(c("-s", "--suffix"), action="store", default=NULL, type = 'character', help = "Number of cores to use")
+  optparse::make_option(c("-s", "--suffix"), action="store", default=NULL, type = 'character', help = "Suffix of file name")
 )
 
 parser <- optparse::OptionParser(option_list=option_list)
@@ -124,7 +124,7 @@ setMobility <- function(test) {
 buildTest <- function(param_vec, suffix = NULL) {
   test <- list(
     nnodes = as.integer(param_vec[["N"]]),
-    pop = rep(1e5, param_vec[["N"]]),
+    pop = rep(param_vec[["pop"]], param_vec[["N"]]),
     mobility = param_vec[["mob"]],
     fit_confirmation = T,
     confirmation_transform = param_vec[["conf_transform"]],
@@ -141,7 +141,9 @@ buildTest <- function(param_vec, suffix = NULL) {
   # test$runid <- glue::glue("N{test$nnodes}_npis-sd{test$pert_sd_npis}-b{test$pert_bound_npis}_conf-sd{test$pert_sd_conf}-b{test$pert_bound_conf}-t{test$confirmation_transform}") %>% 
   #   str_replace_all("\\.", "")
   # 
-  test$runid <- glue::glue("N{test$nnodes}_npis-sd{test$pert_sd_npis}_conf-sd{test$pert_sd_conf}_lc-{test$lik_cases}_ld-{test$lik_deaths}") %>% 
+  # test$runid <- glue::glue("N{test$nnodes}_npis-sd{test$pert_sd_npis}_conf-sd{test$pert_sd_conf}_lc-{test$lik_cases}_ld-{test$lik_deaths}") %>% 
+  #   str_replace_all("\\.", "")
+  test$runid <- glue::glue("N{test$nnodes}_npis-sd{test$pert_sd_npis}_conf-sd{test$pert_sd_conf}_lc-{test$lik_cases}_ld-{test$lik_deaths}_pop{log10(test$pop[1])}") %>% 
     str_replace_all("\\.", "")
   
   if(!is.null(suffix)) {
@@ -167,17 +169,20 @@ buildTest <- function(param_vec, suffix = NULL) {
 # Test specifications
 test_specs <- expand.grid(
   # Standard deviation of perturbation kernel
-  pert_sd_npis = c(.01, .05, .1, .2),
+  # pert_sd_npis = c(.01, .05, .1, .2),
+  pert_sd_npis = c(.05),
   # Bounds on truncated normal of perturbation kernel
   pert_bound_npis = c(1),
   # Standard deviation of perturbation kernel
-  pert_sd_conf = c(.01, .05, .1, .2),
+  # pert_sd_conf = c(.01, .05, .1, .2),
+  pert_sd_conf = c(.01, .05, .01),
   # Bounds on truncated normal of perturbation kernel
   pert_bound_conf = c(1),
   # Transformation on the confirmation rate
   conf_transform = c("none"),
   # Number of nodes
   N = c(50),
+  pop = c(1e3, 1e4),
   # lik_cases = c("sqrtnorm-0.01", "sqrtnorm-0.05", "pois", "sqrtnorm-0.1"),
   # lik_deaths = c("sqrtnorm-0.01", "sqrtnorm-0.05", "pois", "sqrtnorm-0.1")
   lik_cases = c("sqrtnorm-0.01"),
@@ -256,7 +261,7 @@ for (test in tests) {
   
   geodata <- tibble(
     geoid =  1:test$nnodes,
-    pop = rep(1e5, test$nnodes)  # initial number of susceptibles in synthetic population
+    pop = test$pop  # initial number of susceptibles in synthetic population
   ) %>% 
     mutate(geoid = stringr::str_pad(geoid, 5, pad = "0"))
   
