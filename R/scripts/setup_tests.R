@@ -21,7 +21,8 @@ option_list = list(
   optparse::make_option(c("-n", "--n_slots"), action="store", default=100, type = 'integer', help = "Number of slots to run"),
   optparse::make_option(c("-k", "--n_iter"), action="store", default=300, type = 'integer', help = "Number of iterations per slot"),
   optparse::make_option(c("-j", "--n_cores"), action="store", default=parallel::detectCores() - 2, type = 'integer', help = "Number of cores to use"),
-  optparse::make_option(c("-s", "--suffix"), action="store", default=NULL, type = 'character', help = "Suffix of file name")
+  optparse::make_option(c("-s", "--suffix"), action="store", default=NULL, type = 'character', help = "Suffix of file name"),
+  optparse::make_option(c("-x", "--pop"), action="store", default=5, type = 'numeric', help = "population log 10")
 )
 
 parser <- optparse::OptionParser(option_list=option_list)
@@ -183,7 +184,7 @@ test_specs <- expand.grid(
   conf_transform = c("none"),
   # Number of nodes
   N = c(50),
-  pop = c(1e3, 1e4),
+  pop = 10^opt$pop,
   # lik_cases = c("sqrtnorm-0.01", "sqrtnorm-0.05", "pois", "sqrtnorm-0.1"),
   # lik_deaths = c("sqrtnorm-0.01", "sqrtnorm-0.05", "pois", "sqrtnorm-0.1")
   lik_cases = c("sqrtnorm-0.01"),
