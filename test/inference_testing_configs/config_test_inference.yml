@@ -75,6 +75,7 @@ interventions:
 
 outcomes:
   method: delayframe
+  param_from_file: no
   scenarios: med
   settings:
     med:
