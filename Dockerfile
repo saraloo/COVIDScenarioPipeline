@@ -21,7 +21,8 @@ RUN set -e \
         gnupg2 gnupg1 ca-certificates software-properties-common \
       && apt-key adv --keyserver keyserver.ubuntu.com --recv-keys E298A3A825C0D65DFD57CBB651716619E084DAB9 \
       && add-apt-repository 'deb https://cloud.r-project.org/bin/linux/ubuntu bionic-cran35/' \
-      && add-apt-repository ppa:git-core/ppa
+      && add-apt-repository ppa:git-core/ppa \
+      && add-apt-repository ppa:deadsnakes/ppa
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
@@ -69,9 +70,11 @@ RUN apt-get update && \
     supervisor \
     awscli \
     r-base-dev=$R_VERSION \
+    python3.10 \
     # make sure we have up-to-date CA certs or curling some https endpoints (like python.org) may fail
     ca-certificates \
     # app user creation
+    && sudo ln -s /usr/bin/python3.10 /usr/local/bin/python \
     && useradd -m app \
     && mkdir -p /home/app \
     && chown app:app /home/app \
@@ -97,34 +100,6 @@ COPY --chown=app:app R/pkgs $HOME/R/pkgs
 RUN Rscript -e 'packrat::restore()'
 RUN Rscript -e 'install.packages(list.files("R/pkgs",full.names=TRUE,recursive=TRUE),type="source",repos=NULL)'
 
-
-#####
-# Python (managed via pyenv)
-#####
-
-ENV PYENV_ROOT $HOME/.pyenv
-ENV PYTHON_VERSION 3.7.6
-ENV PYTHON_VENV_DIR $HOME/python_venv
-ENV PATH $PYENV_ROOT/shims:$PYENV_ROOT/bin:$PATH
-
-
-RUN git clone git://github.com/yyuu/pyenv.git $HOME/.pyenv \
-    && rm -rf $HOME/.pyenv/.git \
-    && env PYTHON_CONFIGURE_OPTS="--enable-shared" pyenv install -s $PYTHON_VERSION --verbose \
-    && pyenv rehash \
-    && echo 'eval "$(pyenv init -)"' >> ~/.bashrc \
-    && echo "PS1=\"\[\e]0;\u@\h: \w\a\] \h:\w\$ \"" >> ~/.bashrc
-
-RUN eval "$(pyenv init -)" \
-    && pyenv shell $PYTHON_VERSION \
-    && pyvenv $PYTHON_VENV_DIR \
-    # automatically activate the python venv when logging in
-    && echo ". $HOME/python_venv/bin/activate" >> $HOME/.bashrc \
-    && . $PYTHON_VENV_DIR/bin/activate
-
 COPY requirements.txt $HOME/requirements.txt
-RUN . $PYTHON_VENV_DIR/bin/activate \
-    && pip install --upgrade pip setuptools \
-    && pip install -r $HOME/requirements.txt
 
 CMD ["/bin/bash"]
